@@ -61,3 +61,90 @@ export function addMonths(dateString: string, months: number): string {
   const day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
 }
+
+// ----------------------------------------------------
+// UTILIDADES Y REGLAS DE VALIDACIÓN DE FORMULARIOS
+// ----------------------------------------------------
+
+/**
+ * Filtra el texto ingresado permitiendo únicamente dígitos numéricos (0-9).
+ * Opcionalmente limita la longitud máxima de caracteres.
+ */
+export function onlyDigits(val: string, maxLength?: number): string {
+  const digitsOnly = val.replace(/\D/g, '');
+  if (maxLength && maxLength > 0) {
+    return digitsOnly.slice(0, maxLength);
+  }
+  return digitsOnly;
+}
+
+/**
+ * Regla de validación de contraseña:
+ * - Mínimo 8 caracteres
+ * - Al menos una letra mayúscula (A-Z)
+ * - Al menos un número (0-9)
+ */
+export function validatePassword(password: string): { isValid: boolean; message?: string } {
+  if (!password || password.length < 8) {
+    return { isValid: false, message: 'La contraseña debe tener al menos 8 caracteres.' };
+  }
+  if (!/[A-Z]/.test(password)) {
+    return { isValid: false, message: 'La contraseña debe contener al menos una letra mayúscula (A-Z).' };
+  }
+  if (!/[0-9]/.test(password)) {
+    return { isValid: false, message: 'La contraseña debe contener al menos un número (0-9).' };
+  }
+  return { isValid: true };
+}
+
+/**
+ * Validación de Teléfono Móvil (10 dígitos exactos)
+ */
+export function validatePhone(phone: string, fieldName = 'Teléfono'): { isValid: boolean; message?: string } {
+  const digits = phone.replace(/\D/g, '');
+  if (digits.length !== 10) {
+    return { isValid: false, message: `El campo ${fieldName} debe contener exactamente 10 dígitos numéricos.` };
+  }
+  return { isValid: true };
+}
+
+/**
+ * Validación de Código Postal (5 dígitos exactos)
+ */
+export function validatePostalCode(cp: string, fieldName = 'Código Postal'): { isValid: boolean; message?: string } {
+  const digits = cp.replace(/\D/g, '');
+  if (digits.length !== 5) {
+    return { isValid: false, message: `El ${fieldName} debe tener exactamente 5 dígitos numéricos.` };
+  }
+  return { isValid: true };
+}
+
+/**
+ * Validación de Fecha de Nacimiento
+ * - Debe tener año de 4 dígitos entre 1920 y el año actual - 18
+ */
+export function validateBirthdate(dateStr: string): { isValid: boolean; message?: string } {
+  if (!dateStr) {
+    return { isValid: false, message: 'La Fecha de Nacimiento es requerida.' };
+  }
+  const parts = dateStr.split('-');
+  if (parts.length !== 3 || parts[0].length !== 4) {
+    return { isValid: false, message: 'La Fecha de Nacimiento debe tener un año válido de 4 dígitos.' };
+  }
+  const year = parseInt(parts[0], 10);
+  const currentYear = new Date().getFullYear();
+
+  if (year < 1920 || year > currentYear - 18) {
+    return { isValid: false, message: `Año de nacimiento inválido (debe ser un año válido de 4 dígitos entre 1920 y ${currentYear - 18}).` };
+  }
+  return { isValid: true };
+}
+
+/**
+ * Validación de Correo Electrónico
+ */
+export function validateEmail(email: string): boolean {
+  if (!email || !email.trim()) return false;
+  const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return re.test(email.trim());
+}

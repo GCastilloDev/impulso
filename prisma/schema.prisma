@@ -39,7 +39,8 @@ model Client {
   direccion              String
   direccionEstructurada Json?
   curp                   String
-  rfc                    String
+  rfc                    String?
+  folioIne               String?
   scoreCrediticio        String   @default("Excelente")
   promotorAsignadoId     String?
   promotorAsignadoNombre String?

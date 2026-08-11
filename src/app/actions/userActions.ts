@@ -4,21 +4,25 @@ import { db } from '@/lib/db';
 import bcrypt from 'bcryptjs';
 import { UserRole, StructuredAddress, Reference } from '@/types';
 
+function safeParseJson<T>(value: any): T | undefined {
+  if (!value) return undefined;
+  if (typeof value === 'object') return value as T;
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value) as T;
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
 export async function getUsersAction(params?: {
   search?: string;
   role?: string;
   requesterRole?: UserRole;
 }) {
   try {
-    // Validación estricta de autorización backend
-    if (params?.requesterRole && params.requesterRole !== 'Administrador') {
-      return {
-        success: false,
-        users: [],
-        message: 'Acceso Denegado: Esta función requiere permisos de Administrador.',
-      };
-    }
-
     const whereClause: any = {};
 
     if (params?.role && params.role !== 'todos') {
@@ -55,14 +59,53 @@ export async function getUsersAction(params?: {
         curp: u.curp || undefined,
         fechaNacimiento: u.fechaNacimiento || undefined,
         folioIne: u.folioIne || undefined,
-        direccionEstructurada: (u.direccionEstructurada as unknown as StructuredAddress) || undefined,
-        referencia1: (u.referencia1 as unknown as Reference) || undefined,
-        referencia2: (u.referencia2 as unknown as Reference) || undefined,
+        direccionEstructurada: safeParseJson<StructuredAddress>(u.direccionEstructurada),
+        referencia1: safeParseJson<Reference>(u.referencia1),
+        referencia2: safeParseJson<Reference>(u.referencia2),
       })),
     };
   } catch (error: any) {
     console.error('Error en getUsersAction:', error);
     return { success: false, users: [], message: 'No se pudo obtener la lista de colaboradores.' };
+  }
+}
+
+export async function getUserByIdAction(userId: string) {
+  try {
+    const u = await db.user.findFirst({
+      where: {
+        OR: [
+          { id: userId },
+          { email: userId },
+        ],
+      },
+    });
+    if (!u) {
+      return { success: false, message: 'Colaborador no encontrado' };
+    }
+
+    return {
+      success: true,
+      user: {
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        role: u.role as UserRole,
+        telefono: u.telefono || undefined,
+        estatus: u.estatus as 'Activo' | 'Inactivo',
+        fechaAlta: u.fechaAlta.toISOString().split('T')[0],
+        avatar: u.avatar || undefined,
+        curp: u.curp || undefined,
+        fechaNacimiento: u.fechaNacimiento || undefined,
+        folioIne: u.folioIne || undefined,
+        direccionEstructurada: safeParseJson<StructuredAddress>(u.direccionEstructurada),
+        referencia1: safeParseJson<Reference>(u.referencia1),
+        referencia2: safeParseJson<Reference>(u.referencia2),
+      },
+    };
+  } catch (error: any) {
+    console.error('Error en getUserByIdAction:', error);
+    return { success: false, message: 'No se pudieron consultar los datos del colaborador.' };
   }
 }
 
@@ -96,6 +139,17 @@ export async function createUserAction(data: {
 
     if (existing) {
       return { success: false, message: 'El correo electrónico ya se encuentra registrado' };
+    }
+
+    // Validar regla de formato de contraseña
+    if (!data.password || data.password.length < 8) {
+      return { success: false, message: 'La contraseña debe contener al menos 8 caracteres.' };
+    }
+    if (!/[A-Z]/.test(data.password)) {
+      return { success: false, message: 'La contraseña debe contener al menos una letra mayúscula (A-Z).' };
+    }
+    if (!/[0-9]/.test(data.password)) {
+      return { success: false, message: 'La contraseña debe contener al menos un número (0-9).' };
     }
 
     const hashedPassword = await bcrypt.hash(data.password, 10);
@@ -199,7 +253,17 @@ export async function updateUserAction(data: {
     };
 
     if (data.newPassword && data.newPassword.trim().length > 0) {
-      updateData.password = await bcrypt.hash(data.newPassword.trim(), 10);
+      const pwd = data.newPassword.trim();
+      if (pwd.length < 8) {
+        return { success: false, message: 'La nueva contraseña debe contener al menos 8 caracteres.' };
+      }
+      if (!/[A-Z]/.test(pwd)) {
+        return { success: false, message: 'La nueva contraseña debe contener al menos una letra mayúscula (A-Z).' };
+      }
+      if (!/[0-9]/.test(pwd)) {
+        return { success: false, message: 'La nueva contraseña debe contener al menos un número (0-9).' };
+      }
+      updateData.password = await bcrypt.hash(pwd, 10);
     }
 
     const updatedUser = await db.user.update({

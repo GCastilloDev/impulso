@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Banknote, ArrowLeft, Calculator, Calendar, CheckCircle2, User, Percent, Loader2 } from 'lucide-react';
+import { Banknote, ArrowLeft, Calculator, Calendar, CheckCircle2, User, Percent, Loader2, AlertCircle } from 'lucide-react';
 import { useImpulsoStore } from '@/store/useImpulsoStore';
 import { calculateAmortizationSchedule } from '@/lib/financialCalculators';
 import { formatCurrency, formatDate, getTodayDateString } from '@/lib/utils';
@@ -52,10 +52,62 @@ function LoanFormContent() {
   }, [montoPrincipal, selectedProduct, plazoCantidad, fechaInicio]);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const showErrorMsg = (msg: string) => {
+    setErrorMsg(msg);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   const handleCreateLoan = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedClient || !selectedProduct || !amortizationData || isSubmitting) return;
+    if (isSubmitting) return;
+
+    setErrorMsg(null);
+
+    // --- VALIDACIONES ESTRUCTURADAS (DE ARRIBA HACIA ABAJO SEGÚN EL FORMULARIO) ---
+    // 1. Cliente Solicitante
+    if (!selectedClientId || !selectedClient) {
+      showErrorMsg('Debes seleccionar un cliente solicitante activo.');
+      return;
+    }
+
+    // 2. Producto Financiero
+    if (!selectedProductId || !selectedProduct) {
+      showErrorMsg('Debes seleccionar un producto financiero activo.');
+      return;
+    }
+
+    // 3. Monto del Préstamo
+    const minMonto = selectedProduct.montoMinimo || 1000;
+    const maxMonto = selectedProduct.montoMaximo || 100000;
+    if (!montoPrincipal || montoPrincipal < minMonto || montoPrincipal > maxMonto) {
+      showErrorMsg(`El monto del préstamo debe estar dentro del rango estipulado (${formatCurrency(minMonto)} - ${formatCurrency(maxMonto)}).`);
+      return;
+    }
+
+    // 4. Plazo (Número de Cuotas)
+    if (!plazoCantidad || plazoCantidad <= 0) {
+      showErrorMsg('Debes seleccionar un plazo de cuotas válido para este producto.');
+      return;
+    }
+
+    // 5. Fecha de Inicio / Desembolso
+    if (!fechaInicio) {
+      showErrorMsg('La Fecha de Desembolso es obligatoria.');
+      return;
+    }
+
+    // 6. Promotor Asignado
+    if (!promotorAsignado || !promotorAsignado.trim()) {
+      showErrorMsg('El nombre del promotor asignado es obligatorio.');
+      return;
+    }
+
+    if (!amortizationData) {
+      showErrorMsg('No se pudo calcular la tabla de amortización con los parámetros seleccionados.');
+      return;
+    }
 
     setIsSubmitting(true);
     try {
@@ -74,7 +126,7 @@ function LoanFormContent() {
         totalAPagar: amortizationData.totalAPagar,
         saldoPendiente: amortizationData.totalAPagar,
         estatus: 'Activo',
-        promotorAsignado,
+        promotorAsignado: promotorAsignado.trim(),
         tablaAmortizacion: amortizationData.tablaAmortizacion,
       });
 
@@ -88,10 +140,18 @@ function LoanFormContent() {
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
       {/* Form Inputs Column */}
       <div className="lg:col-span-5 space-y-5">
-        <form onSubmit={handleCreateLoan} className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4">
+        <form onSubmit={handleCreateLoan} noValidate className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4">
           <h2 className="text-base font-extrabold text-white pb-2 border-b border-slate-800 flex items-center gap-2">
             <User className="w-4 h-4 text-emerald-400" /> Datos de la Solicitud
           </h2>
+
+          {/* Error Banner */}
+          {errorMsg && (
+            <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/40 text-rose-300 text-xs font-semibold flex items-center gap-2.5 shadow-lg shadow-rose-500/10">
+              <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+              <span>{errorMsg}</span>
+            </div>
+          )}
 
           {/* Client Select */}
           <div>
@@ -188,7 +248,7 @@ function LoanFormContent() {
                 required
                 value={fechaInicio}
                 onChange={(e) => setFechaInicio(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500"
+                className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500 [color-scheme:dark]"
               />
             </div>
 
@@ -254,7 +314,7 @@ function LoanFormContent() {
         {/* Amortization Table Preview */}
         <div className="glass-panel p-5 rounded-2xl border border-slate-800 space-y-3">
           <h3 className="text-sm font-extrabold text-white flex items-center gap-2">
-            <Calendar className="w-4 h-4 text-emerald-400" />
+            <Calendar className="w-4 h-4 text-white" />
             Tabla de Amortización Generada ({amortizationData?.tablaAmortizacion.length || 0} Pagos)
           </h3>
 

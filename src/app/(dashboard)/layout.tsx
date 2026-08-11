@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
+import { Loader2 } from 'lucide-react';
 import { Sidebar } from '@/components/shared/Sidebar';
 import { Navbar } from '@/components/shared/Navbar';
 import { useImpulsoStore } from '@/store/useImpulsoStore';
@@ -12,17 +13,26 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [hasMounted, setHasMounted] = useState(false);
   const { isAuthenticated } = useImpulsoStore();
   const router = useRouter();
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    setHasMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (hasMounted && !isAuthenticated) {
       router.push('/login');
     }
-  }, [isAuthenticated, router]);
+  }, [hasMounted, isAuthenticated, router]);
 
-  if (!isAuthenticated) {
-    return null;
+  if (!hasMounted || !isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-[#090d16] flex items-center justify-center text-emerald-400">
+        <Loader2 className="w-8 h-8 animate-spin" />
+      </div>
+    );
   }
 
   return (

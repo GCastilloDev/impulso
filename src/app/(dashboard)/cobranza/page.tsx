@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import confetti from 'canvas-confetti';
 import {
   Smartphone,
@@ -128,6 +128,19 @@ export default function CollectionPage() {
     e.preventDefault();
     if (!selectedItem || isSubmitting) return;
 
+    // --- VALIDACIONES ESTRUCTURADAS (DE ARRIBA HACIA ABAJO SEGÚN EL FORMULARIO) ---
+    // 1. Monto Recibido
+    if (!montoRecibido || Number(montoRecibido) <= 0) {
+      setFeedbackMessage('El Monto Recibido es obligatorio y debe ser mayor a $0.');
+      return;
+    }
+
+    // 2. Penalización por Mora
+    if (penalizacionCobrada < 0) {
+      setFeedbackMessage('La penalización por mora no puede ser un monto negativo.');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const result = registerPayment({
@@ -136,6 +149,7 @@ export default function CollectionPage() {
         montoRecibido: Number(montoRecibido),
         penalizacionCobrada: Number(penalizacionCobrada),
         metodoPago,
+        cobradorNombre: currentUser.name,
         nota,
       });
 
@@ -159,6 +173,16 @@ export default function CollectionPage() {
       setIsSubmitting(false);
     }
   };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && selectedItem && !isSubmitting) {
+        setSelectedItem(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedItem, isSubmitting]);
 
   return (
     <div className="space-y-5 max-w-3xl mx-auto">
@@ -349,7 +373,7 @@ export default function CollectionPage() {
                 <p className="font-extrabold text-white text-base">{feedbackMessage}</p>
               </div>
             ) : (
-              <form onSubmit={handleRegisterPayment} className="space-y-4 text-xs">
+              <form onSubmit={handleRegisterPayment} noValidate className="space-y-4 text-xs">
                 {/* Cuota details */}
                 <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
                   <div className="flex justify-between text-slate-300">

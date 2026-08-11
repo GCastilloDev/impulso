@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, User, Phone, MapPin, Banknote, Plus, History, CreditCard, UserCheck, ShieldCheck, UserCog, ShieldAlert } from 'lucide-react';
@@ -28,6 +28,16 @@ export default function ClientDetailPage() {
   const [selectedPromotorId, setSelectedPromotorId] = useState(
     client?.promotorAsignadoId || ''
   );
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isReassignModalOpen) {
+        setIsReassignModalOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isReassignModalOpen]);
 
   if (!client) {
     return (
@@ -92,8 +102,8 @@ export default function ClientDetailPage() {
   const handleSavePromotor = () => {
     if (!selectedPromotorId) {
       updateClient(client.id, {
-        promotorAsignadoId: undefined,
-        promotorAsignadoNombre: undefined,
+        promotorAsignadoId: null,
+        promotorAsignadoNombre: null,
       });
     } else {
       const target = users.find((u) => u.id === selectedPromotorId);
@@ -159,13 +169,15 @@ export default function ClientDetailPage() {
             </div>
           </div>
 
-          <Link
-            href={`/prestamos/nuevo?clienteId=${client.id}`}
-            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-extrabold text-sm shadow-lg shadow-emerald-500/20 transition-all"
+          <button
+            type="button"
+            disabled
+            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-slate-800/80 text-slate-500 font-extrabold text-sm border border-slate-700/60 cursor-not-allowed opacity-60"
+            title="Otorgamiento de préstamo deshabilitado desde expediente"
           >
             <Plus className="w-4 h-4 stroke-[3]" />
             Otorgar Préstamo
-          </Link>
+          </button>
         </div>
       </div>
 

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Banknote, Search, Plus, Calendar, Eye, AlertTriangle, ShieldCheck, Filter } from 'lucide-react';
 import { useImpulsoStore } from '@/store/useImpulsoStore';
@@ -13,6 +13,16 @@ export default function LoansPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('todos');
   const [selectedLoanModal, setSelectedLoanModal] = useState<Loan | null>(null);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && selectedLoanModal) {
+        setSelectedLoanModal(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedLoanModal]);
 
   const filteredLoans = loans.filter((loan) => {
     const matchesSearch =

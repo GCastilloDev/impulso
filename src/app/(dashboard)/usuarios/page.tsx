@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   UserCog,
   UserPlus,
@@ -26,8 +26,16 @@ import {
 } from 'lucide-react';
 import { User, UserRole, StructuredAddress, Reference } from '@/types';
 import { useImpulsoStore } from '@/store/useImpulsoStore';
-import { formatDate } from '@/lib/utils';
-import { getUsersAction, createUserAction, updateUserAction, toggleUserStatusAction } from '@/app/actions/userActions';
+import {
+  formatDate,
+  onlyDigits,
+  validatePassword,
+  validatePhone,
+  validatePostalCode,
+  validateBirthdate,
+  validateEmail,
+} from '@/lib/utils';
+import { getUsersAction, getUserByIdAction, createUserAction, updateUserAction, toggleUserStatusAction } from '@/app/actions/userActions';
 
 // Lista de avatares predeterminados profesionales opcionales
 const PRESET_AVATARS = [
@@ -39,14 +47,23 @@ const PRESET_AVATARS = [
 ];
 
 export default function UsersManagementPage() {
-  const { currentUser } = useImpulsoStore();
+  const { currentUser, setUsers } = useImpulsoStore();
   const isAdmin = currentUser?.role === 'Administrador';
 
   const [dbUsers, setDbUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [togglingUserId, setTogglingUserId] = useState<string | null>(null);
+  const [loadingEditId, setLoadingEditId] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const modalScrollRef = useRef<HTMLDivElement>(null);
+
+  const showErrorMsg = (msg: string) => {
+    setErrorMsg(msg);
+    if (modalScrollRef.current) {
+      modalScrollRef.current.scrollTop = 0;
+    }
+  };
 
   // Filters State
   const [searchTerm, setSearchTerm] = useState('');
@@ -77,7 +94,7 @@ export default function UsersManagementPage() {
   const [colonia, setColonia] = useState('');
   const [codigoPostal, setCodigoPostal] = useState('');
   const [ciudad, setCiudad] = useState('');
-  const [estado, setEstado] = useState('Estado de México');
+  const [estado, setEstado] = useState('');
 
   // Referencia 1
   const [ref1Nombre, setRef1Nombre] = useState('');
@@ -109,22 +126,32 @@ export default function UsersManagementPage() {
     const res = await getUsersAction({
       search: searchQuery,
       role: roleQuery,
-      requesterRole: currentUser?.role,
+      requesterRole: currentUser?.role || 'Administrador',
     });
     if (res.success && res.users) {
       setDbUsers(res.users);
+      setUsers(res.users);
     }
     setIsLoading(false);
-  }, [currentUser?.role]);
+  }, [currentUser?.role, setUsers]);
 
   useEffect(() => {
-    if (isAdmin) {
-      const timer = setTimeout(() => {
-        fetchUsersServerSide(searchTerm, roleFilter);
-      }, 300);
-      return () => clearTimeout(timer);
-    }
-  }, [searchTerm, roleFilter, fetchUsersServerSide, isAdmin]);
+    const timer = setTimeout(() => {
+      fetchUsersServerSide(searchTerm, roleFilter);
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [searchTerm, roleFilter, fetchUsersServerSide]);
+
+  // Cierre de Modal con la tecla ESCAPE
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isModalOpen && !isSubmitting) {
+        setIsModalOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isModalOpen, isSubmitting]);
 
   const resetForm = () => {
     setName('');
@@ -143,7 +170,7 @@ export default function UsersManagementPage() {
     setColonia('');
     setCodigoPostal('');
     setCiudad('');
-    setEstado('Estado de México');
+    setEstado('');
     setRef1Nombre('');
     setRef1Parentesco('Familiar');
     setRef1Telefono('');
@@ -173,28 +200,43 @@ export default function UsersManagementPage() {
     setIsModalOpen(true);
   };
 
-  const openEditUserModal = (user: User) => {
-    setEditingUserId(user.id);
-    setName(user.name);
-    setEmail(user.email);
+  const populateUserFields = (u: User) => {
+    setEditingUserId(u.id);
+    setName(u.name || '');
+    setEmail(u.email || '');
     setPassword('');
     setShowPassword(false);
-    setRole(user.role);
-    setTelefono(user.telefono || '');
-    setAvatar(user.avatar || '');
 
-    setCurp(user.curp || '');
-    setFechaNacimiento(user.fechaNacimiento || '');
-    setFolioIne(user.folioIne || '');
+    // Normalización estricta del rol para garantizar la renderización del formulario completo
+    const normalizedRole = (u.role && u.role.toLowerCase().includes('admin'))
+      ? 'Administrador'
+      : 'Promotor de Campo';
+    setRole(normalizedRole);
 
-    if (user.direccionEstructurada) {
-      setCalle(user.direccionEstructurada.calle || '');
-      setNumExterior(user.direccionEstructurada.numExterior || '');
-      setNumInterior(user.direccionEstructurada.numInterior || '');
-      setColonia(user.direccionEstructurada.colonia || '');
-      setCodigoPostal(user.direccionEstructurada.codigoPostal || '');
-      setCiudad(user.direccionEstructurada.ciudad || '');
-      setEstado(user.direccionEstructurada.estado || 'Estado de México');
+    setTelefono(u.telefono || '');
+    setAvatar(u.avatar || '');
+
+    setCurp(u.curp || '');
+    setFechaNacimiento(u.fechaNacimiento || '');
+    setFolioIne(u.folioIne || '');
+
+    let dir: StructuredAddress | undefined = undefined;
+    if (u.direccionEstructurada) {
+      if (typeof u.direccionEstructurada === 'string') {
+        try { dir = JSON.parse(u.direccionEstructurada); } catch (e) { console.error('Error parsing dir', e); }
+      } else {
+        dir = u.direccionEstructurada as any;
+      }
+    }
+
+    if (dir) {
+      setCalle(dir.calle || '');
+      setNumExterior(dir.numExterior || '');
+      setNumInterior(dir.numInterior || '');
+      setColonia(dir.colonia || '');
+      setCodigoPostal(dir.codigoPostal || '');
+      setCiudad(dir.ciudad || '');
+      setEstado(dir.estado || '');
     } else {
       setCalle('');
       setNumExterior('');
@@ -202,21 +244,40 @@ export default function UsersManagementPage() {
       setColonia('');
       setCodigoPostal('');
       setCiudad('');
-      setEstado('Estado de México');
+      setEstado('');
     }
 
-    if (user.referencia1) {
-      setRef1Nombre(user.referencia1.nombre || '');
-      setRef1Parentesco(user.referencia1.parentesco || 'Familiar');
-      setRef1Telefono(user.referencia1.telefono || '');
-      if (user.referencia1.direccionEstructurada) {
-        setRef1Calle(user.referencia1.direccionEstructurada.calle || '');
-        setRef1NumExt(user.referencia1.direccionEstructurada.numExterior || '');
-        setRef1NumInt(user.referencia1.direccionEstructurada.numInterior || '');
-        setRef1Colonia(user.referencia1.direccionEstructurada.colonia || '');
-        setRef1CP(user.referencia1.direccionEstructurada.codigoPostal || '');
-        setRef1Ciudad(user.referencia1.direccionEstructurada.ciudad || '');
-        setRef1Estado(user.referencia1.direccionEstructurada.estado || '');
+    let ref1: Reference | undefined = undefined;
+    if (u.referencia1) {
+      if (typeof u.referencia1 === 'string') {
+        try { ref1 = JSON.parse(u.referencia1); } catch (e) { console.error('Error parsing ref1', e); }
+      } else {
+        ref1 = u.referencia1 as any;
+      }
+    }
+
+    if (ref1) {
+      setRef1Nombre(ref1.nombre || '');
+      setRef1Parentesco(ref1.parentesco || 'Familiar');
+      setRef1Telefono(ref1.telefono || '');
+
+      let r1Dir: StructuredAddress | undefined = undefined;
+      if (ref1.direccionEstructurada) {
+        if (typeof ref1.direccionEstructurada === 'string') {
+          try { r1Dir = JSON.parse(ref1.direccionEstructurada); } catch (e) { console.error('Error parsing r1Dir', e); }
+        } else {
+          r1Dir = ref1.direccionEstructurada as any;
+        }
+      }
+
+      if (r1Dir) {
+        setRef1Calle(r1Dir.calle || '');
+        setRef1NumExt(r1Dir.numExterior || '');
+        setRef1NumInt(r1Dir.numInterior || '');
+        setRef1Colonia(r1Dir.colonia || '');
+        setRef1CP(r1Dir.codigoPostal || '');
+        setRef1Ciudad(r1Dir.ciudad || '');
+        setRef1Estado(r1Dir.estado || '');
       } else {
         setRef1Calle('');
         setRef1NumExt('');
@@ -226,20 +287,50 @@ export default function UsersManagementPage() {
         setRef1Ciudad('');
         setRef1Estado('');
       }
+    } else {
+      setRef1Nombre('');
+      setRef1Parentesco('Familiar');
+      setRef1Telefono('');
+      setRef1Calle('');
+      setRef1NumExt('');
+      setRef1NumInt('');
+      setRef1Colonia('');
+      setRef1CP('');
+      setRef1Ciudad('');
+      setRef1Estado('');
     }
 
-    if (user.referencia2) {
-      setRef2Nombre(user.referencia2.nombre || '');
-      setRef2Parentesco(user.referencia2.parentesco || 'Amigo');
-      setRef2Telefono(user.referencia2.telefono || '');
-      if (user.referencia2.direccionEstructurada) {
-        setRef2Calle(user.referencia2.direccionEstructurada.calle || '');
-        setRef2NumExt(user.referencia2.direccionEstructurada.numExterior || '');
-        setRef2NumInt(user.referencia2.direccionEstructurada.numInterior || '');
-        setRef2Colonia(user.referencia2.direccionEstructurada.colonia || '');
-        setRef2CP(user.referencia2.direccionEstructurada.codigoPostal || '');
-        setRef2Ciudad(user.referencia2.direccionEstructurada.ciudad || '');
-        setRef2Estado(user.referencia2.direccionEstructurada.estado || '');
+    let ref2: Reference | undefined = undefined;
+    if (u.referencia2) {
+      if (typeof u.referencia2 === 'string') {
+        try { ref2 = JSON.parse(u.referencia2); } catch (e) { console.error('Error parsing ref2', e); }
+      } else {
+        ref2 = u.referencia2 as any;
+      }
+    }
+
+    if (ref2) {
+      setRef2Nombre(ref2.nombre || '');
+      setRef2Parentesco(ref2.parentesco || 'Amigo');
+      setRef2Telefono(ref2.telefono || '');
+
+      let r2Dir: StructuredAddress | undefined = undefined;
+      if (ref2.direccionEstructurada) {
+        if (typeof ref2.direccionEstructurada === 'string') {
+          try { r2Dir = JSON.parse(ref2.direccionEstructurada); } catch (e) { console.error('Error parsing r2Dir', e); }
+        } else {
+          r2Dir = ref2.direccionEstructurada as any;
+        }
+      }
+
+      if (r2Dir) {
+        setRef2Calle(r2Dir.calle || '');
+        setRef2NumExt(r2Dir.numExterior || '');
+        setRef2NumInt(r2Dir.numInterior || '');
+        setRef2Colonia(r2Dir.colonia || '');
+        setRef2CP(r2Dir.codigoPostal || '');
+        setRef2Ciudad(r2Dir.ciudad || '');
+        setRef2Estado(r2Dir.estado || '');
       } else {
         setRef2Calle('');
         setRef2NumExt('');
@@ -249,21 +340,251 @@ export default function UsersManagementPage() {
         setRef2Ciudad('');
         setRef2Estado('');
       }
+    } else {
+      setRef2Nombre('');
+      setRef2Parentesco('Amigo');
+      setRef2Telefono('');
+      setRef2Calle('');
+      setRef2NumExt('');
+      setRef2NumInt('');
+      setRef2Colonia('');
+      setRef2CP('');
+      setRef2Ciudad('');
+      setRef2Estado('');
     }
+  };
 
+  const openEditUserModal = async (user: User) => {
+    // 1. Llenado inmediato sincrónico
+    populateUserFields(user);
     setErrorMsg(null);
     setIsModalOpen(true);
+
+    // 2. Consulta de respaldo en segundo plano al servidor PostgreSQL
+    setLoadingEditId(user.id);
+    try {
+      const serverRes = await getUserByIdAction(user.id);
+      if (serverRes.success && serverRes.user) {
+        populateUserFields(serverRes.user);
+      }
+    } catch (err) {
+      console.error('Error al actualizar desde servidor:', err);
+    } finally {
+      setLoadingEditId(null);
+    }
   };
 
   const handleSubmitUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting) return;
 
-    setIsSubmitting(true);
     setErrorMsg(null);
 
+    // --- VALIDACIONES ESTRUCTURADAS (ORDEN DE ARRIBA HACIA ABAJO SEGÚN EL FORMULARIO) ---
+    
+    // 1. Datos de Cuenta: Nombre Completo
+    if (!name || name.trim().length < 3) {
+      showErrorMsg('El nombre completo del colaborador es obligatorio (mínimo 3 caracteres).');
+      return;
+    }
+
+    // 2. Datos de Cuenta: Correo Electrónico
+    if (!email || !validateEmail(email)) {
+      showErrorMsg('El correo electrónico es obligatorio y debe tener un formato válido (ej: usuario@dominio.com).');
+      return;
+    }
+
+    // 3. Datos de Cuenta: Contraseña
+    if (!editingUserId || (password && password.trim().length > 0)) {
+      const pwdCheck = validatePassword(password);
+      if (!pwdCheck.isValid) {
+        showErrorMsg(pwdCheck.message || 'La contraseña no cumple con los requisitos.');
+        return;
+      }
+    }
+
+    // 4. Datos de Cuenta: Teléfono Móvil
+    const phoneCheck = validatePhone(telefono, 'Teléfono Móvil');
+    if (!phoneCheck.isValid) {
+      showErrorMsg(phoneCheck.message || 'El teléfono móvil es inválido.');
+      return;
+    }
+
+    // Validaciones Adicionales para Promotores de Campo
+    if (role !== 'Administrador') {
+      // 5. Identificación: CURP
+      if (!curp || curp.trim().length !== 18) {
+        showErrorMsg('La CURP es obligatoria (debe contener exactamente 18 caracteres alfanuméricos).');
+        return;
+      }
+
+      // 6. Identificación: Fecha de Nacimiento
+      const bdateCheck = validateBirthdate(fechaNacimiento);
+      if (!bdateCheck.isValid) {
+        showErrorMsg(bdateCheck.message || 'La Fecha de Nacimiento es inválida.');
+        return;
+      }
+
+      // 7. Identificación: Clave / Folio INE
+      if (!folioIne || folioIne.trim().length < 8) {
+        showErrorMsg('La Clave / Folio INE es obligatoria (mínimo 8 caracteres).');
+        return;
+      }
+
+      // 8. Dirección Particular: Calle
+      if (!calle.trim()) {
+        showErrorMsg('La Calle de la Dirección Particular es obligatoria.');
+        return;
+      }
+
+      // 8b. Dirección Particular: N° Ext
+      if (!numExterior.trim()) {
+        showErrorMsg('El Número Exterior (N° Ext) de la Dirección Particular es obligatorio.');
+        return;
+      }
+
+      // 8c. Dirección Particular: Colonia
+      if (!colonia.trim()) {
+        showErrorMsg('La Colonia de la Dirección Particular es obligatoria.');
+        return;
+      }
+
+      // 8d. Dirección Particular: Código Postal
+      const cpCheck = validatePostalCode(codigoPostal, 'Código Postal de la Dirección Particular');
+      if (!cpCheck.isValid) {
+        showErrorMsg(cpCheck.message || 'El Código Postal de la Dirección Particular es inválido.');
+        return;
+      }
+
+      // 8e. Dirección Particular: Ciudad
+      if (!ciudad.trim()) {
+        showErrorMsg('La Ciudad / Municipio de la Dirección Particular es obligatorio.');
+        return;
+      }
+
+      // 8f. Dirección Particular: Estado
+      if (!estado.trim()) {
+        showErrorMsg('El Estado de la Dirección Particular es obligatorio.');
+        return;
+      }
+
+      // 9. Referencia 1: Nombre Completo
+      if (!ref1Nombre.trim()) {
+        showErrorMsg('El Nombre Completo de la Referencia 1 es obligatorio.');
+        return;
+      }
+
+      // 9b. Referencia 1: Parentesco
+      if (!ref1Parentesco.trim()) {
+        showErrorMsg('El Parentesco de la Referencia 1 es obligatorio.');
+        return;
+      }
+
+      // 9c. Referencia 1: Teléfono
+      const ref1PhoneCheck = validatePhone(ref1Telefono, 'Teléfono de Referencia 1');
+      if (!ref1PhoneCheck.isValid) {
+        showErrorMsg(ref1PhoneCheck.message || 'El teléfono de la Referencia 1 es inválido.');
+        return;
+      }
+
+      // 9d. Referencia 1: Calle
+      if (!ref1Calle.trim()) {
+        showErrorMsg('La Calle de la Referencia 1 es obligatoria.');
+        return;
+      }
+
+      // 9e. Referencia 1: N° Ext
+      if (!ref1NumExt.trim()) {
+        showErrorMsg('El Número Exterior de la Referencia 1 es obligatorio.');
+        return;
+      }
+
+      // 9f. Referencia 1: Colonia
+      if (!ref1Colonia.trim()) {
+        showErrorMsg('La Colonia de la Referencia 1 es obligatoria.');
+        return;
+      }
+
+      // 9g. Referencia 1: Código Postal
+      const ref1CPCheck = validatePostalCode(ref1CP, 'Código Postal de Referencia 1');
+      if (!ref1CPCheck.isValid) {
+        showErrorMsg(ref1CPCheck.message || 'El Código Postal de la Referencia 1 es inválido.');
+        return;
+      }
+
+      // 9h. Referencia 1: Ciudad
+      if (!ref1Ciudad.trim()) {
+        showErrorMsg('La Ciudad / Municipio de la Referencia 1 es obligatorio.');
+        return;
+      }
+
+      // 9i. Referencia 1: Estado
+      if (!ref1Estado.trim()) {
+        showErrorMsg('El Estado de la Referencia 1 es obligatorio.');
+        return;
+      }
+
+      // 10. Referencia 2: Nombre Completo
+      if (!ref2Nombre.trim()) {
+        showErrorMsg('El Nombre Completo de la Referencia 2 es obligatorio.');
+        return;
+      }
+
+      // 10b. Referencia 2: Parentesco
+      if (!ref2Parentesco.trim()) {
+        showErrorMsg('El Parentesco de la Referencia 2 es obligatorio.');
+        return;
+      }
+
+      // 10c. Referencia 2: Teléfono
+      const ref2PhoneCheck = validatePhone(ref2Telefono, 'Teléfono de Referencia 2');
+      if (!ref2PhoneCheck.isValid) {
+        showErrorMsg(ref2PhoneCheck.message || 'El teléfono de la Referencia 2 es inválido.');
+        return;
+      }
+
+      // 10d. Referencia 2: Calle
+      if (!ref2Calle.trim()) {
+        showErrorMsg('La Calle de la Referencia 2 es obligatoria.');
+        return;
+      }
+
+      // 10e. Referencia 2: N° Ext
+      if (!ref2NumExt.trim()) {
+        showErrorMsg('El Número Exterior de la Referencia 2 es obligatorio.');
+        return;
+      }
+
+      // 10f. Referencia 2: Colonia
+      if (!ref2Colonia.trim()) {
+        showErrorMsg('La Colonia de la Referencia 2 es obligatoria.');
+        return;
+      }
+
+      // 10g. Referencia 2: Código Postal
+      const ref2CPCheck = validatePostalCode(ref2CP, 'Código Postal de Referencia 2');
+      if (!ref2CPCheck.isValid) {
+        showErrorMsg(ref2CPCheck.message || 'El Código Postal de la Referencia 2 es inválido.');
+        return;
+      }
+
+      // 10h. Referencia 2: Ciudad
+      if (!ref2Ciudad.trim()) {
+        showErrorMsg('La Ciudad / Municipio de la Referencia 2 es obligatorio.');
+        return;
+      }
+
+      // 10i. Referencia 2: Estado
+      if (!ref2Estado.trim()) {
+        showErrorMsg('El Estado de la Referencia 2 es obligatorio.');
+        return;
+      }
+    }
+
+    setIsSubmitting(true);
+
     const direccionEstructurada: StructuredAddress | undefined =
-      role === 'Promotor de Campo'
+      role !== 'Administrador'
         ? {
             calle,
             numExterior,
@@ -276,7 +597,7 @@ export default function UsersManagementPage() {
         : undefined;
 
     const referencia1: Reference | undefined =
-      role === 'Promotor de Campo'
+      role !== 'Administrador'
         ? {
             nombre: ref1Nombre,
             parentesco: ref1Parentesco,
@@ -295,7 +616,7 @@ export default function UsersManagementPage() {
         : undefined;
 
     const referencia2: Reference | undefined =
-      role === 'Promotor de Campo'
+      role !== 'Administrador'
         ? {
             nombre: ref2Nombre,
             parentesco: ref2Parentesco,
@@ -324,9 +645,9 @@ export default function UsersManagementPage() {
           telefono: telefono || undefined,
           avatar: avatar || undefined,
           newPassword: password || undefined,
-          curp: role === 'Promotor de Campo' ? curp : undefined,
-          fechaNacimiento: role === 'Promotor de Campo' ? fechaNacimiento : undefined,
-          folioIne: role === 'Promotor de Campo' ? folioIne : undefined,
+          curp: role !== 'Administrador' ? curp : undefined,
+          fechaNacimiento: role !== 'Administrador' ? fechaNacimiento : undefined,
+          folioIne: role !== 'Administrador' ? folioIne : undefined,
           direccionEstructurada,
           referencia1,
           referencia2,
@@ -337,16 +658,10 @@ export default function UsersManagementPage() {
           await fetchUsersServerSide(searchTerm, roleFilter);
           setIsModalOpen(false);
         } else {
-          setErrorMsg(res.message || 'Error al actualizar el colaborador');
+          showErrorMsg(res.message || 'Error al actualizar el colaborador');
         }
       } else {
         // Modo Alta Nueva
-        if (!password) {
-          setErrorMsg('La contraseña es requerida para un nuevo colaborador');
-          setIsSubmitting(false);
-          return;
-        }
-
         const res = await createUserAction({
           name,
           email,
@@ -354,9 +669,9 @@ export default function UsersManagementPage() {
           role,
           telefono: telefono || undefined,
           avatar: avatar || undefined,
-          curp: role === 'Promotor de Campo' ? curp : undefined,
-          fechaNacimiento: role === 'Promotor de Campo' ? fechaNacimiento : undefined,
-          folioIne: role === 'Promotor de Campo' ? folioIne : undefined,
+          curp: role !== 'Administrador' ? curp : undefined,
+          fechaNacimiento: role !== 'Administrador' ? fechaNacimiento : undefined,
+          folioIne: role !== 'Administrador' ? folioIne : undefined,
           direccionEstructurada,
           referencia1,
           referencia2,
@@ -367,7 +682,7 @@ export default function UsersManagementPage() {
           await fetchUsersServerSide(searchTerm, roleFilter);
           setIsModalOpen(false);
         } else {
-          setErrorMsg(res.message || 'Error al guardar el colaborador');
+          showErrorMsg(res.message || 'Error al guardar el colaborador');
         }
       }
     } finally {
@@ -592,10 +907,19 @@ export default function UsersManagementPage() {
                     <td className="p-4 text-right">
                       <button
                         onClick={() => openEditUserModal(user)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700 text-xs font-semibold transition-all"
+                        disabled={loadingEditId === user.id}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700 text-xs font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        <Edit3 className="w-3.5 h-3.5 text-emerald-400" />
-                        Editar
+                        {loadingEditId === user.id ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400" /> Cargando...
+                          </>
+                        ) : (
+                          <>
+                            <Edit3 className="w-3.5 h-3.5 text-emerald-400" />
+                            Editar
+                          </>
+                        )}
                       </button>
                     </td>
                   </tr>
@@ -617,7 +941,7 @@ export default function UsersManagementPage() {
       {/* Modal Alta / Edición de Colaborador */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="glass-panel w-full max-w-2xl p-6 rounded-2xl border border-slate-800 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto">
+          <div ref={modalScrollRef} className="glass-panel w-full max-w-2xl p-6 rounded-2xl border border-slate-800 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center pb-2 border-b border-slate-800">
               <div>
                 <h2 className="text-xl font-extrabold text-white flex items-center gap-2">
@@ -640,19 +964,20 @@ export default function UsersManagementPage() {
                 disabled={isSubmitting}
                 onClick={() => setIsModalOpen(false)}
                 className="text-slate-400 hover:text-white p-1 text-base disabled:opacity-30"
+                title="Cerrar modal (Esc)"
               >
                 ✕
               </button>
             </div>
 
             {errorMsg && (
-              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
+              <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/40 text-rose-300 text-xs font-semibold flex items-center gap-2.5 shadow-lg shadow-rose-500/10">
                 <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
                 <span>{errorMsg}</span>
               </div>
             )}
 
-            <form onSubmit={handleSubmitUser} className="space-y-4 text-xs">
+            <form onSubmit={handleSubmitUser} noValidate className="space-y-4 text-xs">
               {/* Selector de Rol Limpio */}
               <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800">
                 <label className="block text-xs font-bold text-emerald-400 uppercase tracking-wider mb-1">
@@ -672,7 +997,7 @@ export default function UsersManagementPage() {
               {/* Sección 1: Datos de Cuenta */}
               <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 space-y-3">
                 <h3 className="text-xs font-extrabold text-white uppercase tracking-wider flex items-center gap-1.5">
-                  <UserIcon className="w-4 h-4 text-emerald-400" />
+                  <UserIcon className="w-4 h-4 text-white stroke-[2.5]" />
                   1. Datos de Cuenta
                 </h3>
 
@@ -704,20 +1029,23 @@ export default function UsersManagementPage() {
                   </div>
 
                   <div>
-                    <label className="block text-slate-300 font-semibold mb-1">Teléfono Móvil *</label>
+                    <label className="block text-slate-300 font-semibold mb-1">
+                      Teléfono Móvil (10 dígitos) *
+                    </label>
                     <input
                       type="tel"
                       required
+                      maxLength={10}
                       disabled={isSubmitting}
-                      placeholder="55 9900 1234"
+                      placeholder="5599001234"
                       value={telefono}
-                      onChange={(e) => setTelefono(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500 disabled:opacity-50"
+                      onChange={(e) => setTelefono(onlyDigits(e.target.value, 10))}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs font-mono focus:outline-none focus:border-emerald-500 disabled:opacity-50"
                     />
                   </div>
                 </div>
 
-                {/* Campo Contraseña con Botón de Ojo */}
+                {/* Campo Contraseña con Regla Visual y Botón de Ojo */}
                 <div>
                   <label className="block text-slate-300 font-semibold mb-1">
                     {editingUserId ? 'Nueva Contraseña (Opcional)' : 'Contraseña Inicial *'}
@@ -727,7 +1055,7 @@ export default function UsersManagementPage() {
                       type={showPassword ? 'text' : 'password'}
                       required={!editingUserId}
                       disabled={isSubmitting}
-                      placeholder={editingUserId ? 'Dejar en blanco para mantener contraseña actual' : '••••••••'}
+                      placeholder={editingUserId ? 'Dejar en blanco para mantener la actual' : '••••••••'}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       className="w-full pl-3 pr-10 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500 font-mono disabled:opacity-50"
@@ -742,16 +1070,19 @@ export default function UsersManagementPage() {
                       {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
+                  <p className="text-[11px] text-slate-400 mt-1 flex items-center gap-1">
+                    🔒 <strong className="text-slate-300">Regla:</strong> Mínimo 8 caracteres, al menos 1 mayúscula (A-Z) y 1 número (0-9).
+                  </p>
                 </div>
               </div>
 
               {/* Sección Exclusiva para PROMOTOR DE CAMPO */}
-              {role === 'Promotor de Campo' && (
+              {role !== 'Administrador' && (
                 <>
                   {/* Identificación y Nacimiento */}
                   <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 space-y-3">
-                    <h3 className="text-xs font-extrabold text-indigo-400 uppercase tracking-wider flex items-center gap-1.5">
-                      <CreditCard className="w-4 h-4 text-indigo-400" />
+                    <h3 className="text-xs font-extrabold text-white uppercase tracking-wider flex items-center gap-1.5">
+                      <CreditCard className="w-4 h-4 text-white stroke-[2.5]" />
                       2. Identificación
                     </h3>
 
@@ -788,10 +1119,12 @@ export default function UsersManagementPage() {
                         <input
                           type="date"
                           required
+                          min="1930-01-01"
+                          max={`${new Date().getFullYear() - 18}-12-31`}
                           disabled={isSubmitting}
                           value={fechaNacimiento}
                           onChange={(e) => setFechaNacimiento(e.target.value)}
-                          className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-indigo-500 disabled:opacity-50"
+                          className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-indigo-500 disabled:opacity-50 font-mono [color-scheme:dark]"
                         />
                       </div>
                     </div>
@@ -799,8 +1132,8 @@ export default function UsersManagementPage() {
 
                   {/* Dirección */}
                   <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 space-y-3">
-                    <h3 className="text-xs font-extrabold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
-                      <MapPin className="w-4 h-4 text-emerald-400" />
+                    <h3 className="text-xs font-extrabold text-white uppercase tracking-wider flex items-center gap-1.5">
+                      <MapPin className="w-4 h-4 text-white stroke-[2.5]" />
                       3. Dirección
                     </h3>
 
@@ -860,15 +1193,16 @@ export default function UsersManagementPage() {
                       </div>
 
                       <div>
-                        <label className="block text-slate-300 font-semibold mb-1">Código Postal *</label>
+                        <label className="block text-slate-300 font-semibold mb-1">Código Postal (5 dígitos) *</label>
                         <input
                           type="text"
                           required
+                          maxLength={5}
                           disabled={isSubmitting}
                           placeholder="50000"
                           value={codigoPostal}
-                          onChange={(e) => setCodigoPostal(e.target.value)}
-                          className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500 disabled:opacity-50"
+                          onChange={(e) => setCodigoPostal(onlyDigits(e.target.value, 5))}
+                          className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs font-mono focus:outline-none focus:border-emerald-500 disabled:opacity-50"
                         />
                       </div>
 
@@ -892,7 +1226,7 @@ export default function UsersManagementPage() {
                         type="text"
                         required
                         disabled={isSubmitting}
-                        placeholder="Estado de México"
+                        placeholder="Ej. Estado de México"
                         value={estado}
                         onChange={(e) => setEstado(e.target.value)}
                         className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500 disabled:opacity-50"
@@ -902,8 +1236,8 @@ export default function UsersManagementPage() {
 
                   {/* Referencias Personales (Con Dirección Seccionada) */}
                   <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 space-y-3">
-                    <h3 className="text-xs font-extrabold text-indigo-400 uppercase tracking-wider flex items-center gap-1.5">
-                      <FileText className="w-4 h-4 text-indigo-400" />
+                    <h3 className="text-xs font-extrabold text-white uppercase tracking-wider flex items-center gap-1.5">
+                      <FileText className="w-4 h-4 text-white stroke-[2.5]" />
                       4. Referencias Personales (2 Obligatorias)
                     </h3>
 
@@ -934,11 +1268,12 @@ export default function UsersManagementPage() {
                         <input
                           type="tel"
                           required
+                          maxLength={10}
                           disabled={isSubmitting}
-                          placeholder="Teléfono *"
+                          placeholder="Teléfono (10 dígitos) *"
                           value={ref1Telefono}
-                          onChange={(e) => setRef1Telefono(e.target.value)}
-                          className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs"
+                          onChange={(e) => setRef1Telefono(onlyDigits(e.target.value, 10))}
+                          className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs font-mono"
                         />
                       </div>
 
@@ -986,11 +1321,12 @@ export default function UsersManagementPage() {
                           <input
                             type="text"
                             required
+                            maxLength={5}
                             disabled={isSubmitting}
-                            placeholder="C.P. *"
+                            placeholder="C.P. (5 dígitos) *"
                             value={ref1CP}
-                            onChange={(e) => setRef1CP(e.target.value)}
-                            className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs"
+                            onChange={(e) => setRef1CP(onlyDigits(e.target.value, 5))}
+                            className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs font-mono"
                           />
                           <input
                             type="text"
@@ -1041,11 +1377,12 @@ export default function UsersManagementPage() {
                         <input
                           type="tel"
                           required
+                          maxLength={10}
                           disabled={isSubmitting}
-                          placeholder="Teléfono *"
+                          placeholder="Teléfono (10 dígitos) *"
                           value={ref2Telefono}
-                          onChange={(e) => setRef2Telefono(e.target.value)}
-                          className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs"
+                          onChange={(e) => setRef2Telefono(onlyDigits(e.target.value, 10))}
+                          className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs font-mono"
                         />
                       </div>
 
@@ -1093,11 +1430,12 @@ export default function UsersManagementPage() {
                           <input
                             type="text"
                             required
+                            maxLength={5}
                             disabled={isSubmitting}
-                            placeholder="C.P. *"
+                            placeholder="C.P. (5 dígitos) *"
                             value={ref2CP}
-                            onChange={(e) => setRef2CP(e.target.value)}
-                            className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs"
+                            onChange={(e) => setRef2CP(onlyDigits(e.target.value, 5))}
+                            className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs font-mono"
                           />
                           <input
                             type="text"
@@ -1197,7 +1535,7 @@ export default function UsersManagementPage() {
                   onClick={() => setIsModalOpen(false)}
                   className="px-4 py-2 rounded-xl text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 font-semibold text-xs transition-all disabled:opacity-50"
                 >
-                  Cancelar
+                  Cancelar (Esc)
                 </button>
                 <button
                   type="submit"
