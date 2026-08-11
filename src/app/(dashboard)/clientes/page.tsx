@@ -50,11 +50,17 @@ export default function ClientsPage() {
   const [selectedNewPromotorId, setSelectedNewPromotorId] = useState<string>('');
   const [isReassigning, setIsReassigning] = useState(false);
 
-  // Form State - Datos Personales
+  // Form State - Datos Personales & Dirección Estructurada
   const [nombre, setNombre] = useState('');
   const [telefono, setTelefono] = useState('');
   const [email, setEmail] = useState('');
-  const [direccion, setDireccion] = useState('');
+  const [calle, setCalle] = useState('');
+  const [numExterior, setNumExterior] = useState('');
+  const [numInterior, setNumInterior] = useState('');
+  const [colonia, setColonia] = useState('');
+  const [codigoPostal, setCodigoPostal] = useState('');
+  const [ciudad, setCiudad] = useState('');
+  const [estado, setEstado] = useState('CDMX');
   const [curp, setCurp] = useState('');
   const [rfc, setRfc] = useState('');
   const [scoreCrediticio, setScoreCrediticio] = useState<ScoreCrediticio>('Excelente');
@@ -77,7 +83,13 @@ export default function ClientsPage() {
     setNombre('Patricia Guadalupe Sánchez Ruiz');
     setTelefono(`55 7788 ${randomNum}`);
     setEmail(`patricia.sanchez${randomNum}@gmail.com`);
-    setDireccion('Av. Coyoacán 123, Col. Del Valle, CDMX');
+    setCalle('Av. Coyoacán');
+    setNumExterior('123');
+    setNumInterior('4-B');
+    setColonia('Col. Del Valle');
+    setCodigoPostal('03100');
+    setCiudad('Benito Juárez');
+    setEstado('CDMX');
     setCurp(`SARP930612MDFRRN${randomNum.toString().slice(0, 2)}`);
     setRfc(`SARP930612K${randomNum.toString().slice(0, 2)}`);
     setScoreCrediticio('Excelente');
@@ -96,9 +108,6 @@ export default function ClientsPage() {
 
   // Filter clients with Role Access Control Rules
   const visibleClients = clients.filter((client) => {
-    // Regla de Visibilidad por Rol:
-    // Si es Promotor de Campo, SOLO puede ver los clientes asignados a él.
-    // Los clientes sin promotor asignado SOLO son visibles para Administradores.
     if (isPromotor) {
       const isAssignedToMe =
         client.promotorAsignadoId === currentUser.id ||
@@ -107,7 +116,6 @@ export default function ClientsPage() {
       if (!isAssignedToMe) return false;
     }
 
-    // Filtros visuales de búsqueda
     const matchesSearch =
       client.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
       client.curp.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -143,12 +151,22 @@ export default function ClientsPage() {
     setIsSubmitting(true);
     try {
       const assignedUser = users.find((u) => u.id === promotorAsignadoId);
+      const direccionCompleta = `${calle} N° Ext ${numExterior}${numInterior ? ` Int ${numInterior}` : ''}, ${colonia}, ${ciudad}, ${estado}, C.P. ${codigoPostal}`;
 
       addClient({
         nombre,
         telefono,
         email,
-        direccion,
+        direccion: direccionCompleta,
+        direccionEstructurada: {
+          calle,
+          numExterior,
+          numInterior: numInterior || undefined,
+          colonia,
+          codigoPostal,
+          ciudad,
+          estado,
+        },
         curp,
         rfc,
         scoreCrediticio,
@@ -174,7 +192,13 @@ export default function ClientsPage() {
       setNombre('');
       setTelefono('');
       setEmail('');
-      setDireccion('');
+      setCalle('');
+      setNumExterior('');
+      setNumInterior('');
+      setColonia('');
+      setCodigoPostal('');
+      setCiudad('');
+      setEstado('CDMX');
       setCurp('');
       setRfc('');
       setScoreCrediticio('Excelente');
@@ -619,16 +643,99 @@ export default function ClientsPage() {
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Dirección Completa *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Calle, Número, Colonia, Municipio / Ciudad"
-                    value={direccion}
-                    onChange={(e) => setDireccion(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500"
-                  />
+                {/* Dirección del Cliente */}
+                <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-3">
+                  <label className="block text-xs font-bold text-emerald-400 uppercase tracking-wider">
+                    Dirección *
+                  </label>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="sm:col-span-2">
+                      <label className="block text-slate-300 font-semibold mb-1">Calle *</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="Av. Revolución"
+                        value={calle}
+                        onChange={(e) => setCalle(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-slate-300 font-semibold mb-1">N° Ext *</label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="456"
+                          value={numExterior}
+                          onChange={(e) => setNumExterior(e.target.value)}
+                          className="w-full px-2 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-slate-300 font-semibold mb-1">N° Int</label>
+                        <input
+                          type="text"
+                          placeholder="B-3"
+                          value={numInterior}
+                          onChange={(e) => setNumInterior(e.target.value)}
+                          className="w-full px-2 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-slate-300 font-semibold mb-1">Colonia *</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="Col. Condesa"
+                        value={colonia}
+                        onChange={(e) => setColonia(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-300 font-semibold mb-1">Código Postal *</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="06140"
+                        value={codigoPostal}
+                        onChange={(e) => setCodigoPostal(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-300 font-semibold mb-1">Ciudad / Municipio *</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="Ciudad de México"
+                        value={ciudad}
+                        onChange={(e) => setCiudad(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-300 font-semibold mb-1">Estado *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="CDMX"
+                      value={estado}
+                      onChange={(e) => setEstado(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

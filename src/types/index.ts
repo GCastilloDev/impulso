@@ -1,5 +1,23 @@
 export type UserRole = 'Administrador' | 'Promotor de Campo' | string;
 
+export interface StructuredAddress {
+  calle: string;
+  numExterior: string;
+  numInterior?: string;
+  colonia: string;
+  codigoPostal: string;
+  ciudad: string;
+  estado: string;
+}
+
+export interface Reference {
+  nombre: string;
+  parentesco: 'Familiar' | 'Amigo' | 'Vecino' | 'Compañero de Trabajo / Socio' | string;
+  telefono: string;
+  direccionEstructurada?: StructuredAddress;
+  direccion?: string;
+}
+
 export interface User {
   id: string;
   name: string;
@@ -10,6 +28,13 @@ export interface User {
   estatus: 'Activo' | 'Inactivo';
   fechaAlta: string;
   avatar?: string;
+  // Campos específicos para Promotor de Campo
+  curp?: string;
+  fechaNacimiento?: string;
+  folioIne?: string;
+  direccionEstructurada?: StructuredAddress;
+  referencia1?: Reference;
+  referencia2?: Reference;
 }
 
 export type FrecuenciaPago = 'diario' | 'semanal' | 'quincenal' | 'mensual';
@@ -29,13 +54,6 @@ export interface FinancialProduct {
 
 export type ScoreCrediticio = 'Excelente' | 'Bueno' | 'Regular' | 'Alto Riesgo';
 
-export interface Reference {
-  nombre: string;
-  parentesco: 'Familiar' | 'Amigo' | 'Vecino' | 'Compañero de Trabajo / Socio' | string;
-  telefono: string;
-  direccion?: string;
-}
-
 export interface Client {
   id: string;
   folio: string;
@@ -43,6 +61,7 @@ export interface Client {
   telefono: string;
   email: string;
   direccion: string;
+  direccionEstructurada?: StructuredAddress;
   curp: string;
   rfc: string;
   limiteCredito?: number;
@@ -60,18 +79,19 @@ export type EstadoCuota = 'Pendiente' | 'Pagado' | 'Mora' | 'Parcial';
 
 export interface AmortizationInstallment {
   numeroCuota: number;
-  fechaVencimiento: string; // YYYY-MM-DD
-  cuotaTotal: number;
+  fechaVencimiento: string;
   capital: number;
   interes: number;
+  cuotaTotal: number;
   saldoPendiente: number;
-  estado: EstadoCuota;
   montoPagado: number;
-  penalizacionesMora: number;
+  estado: EstadoCuota;
+  fechaPago?: string;
   fechaPagoReal?: string;
+  penalizacionesMora?: number;
 }
 
-export type EstatusPrestamo = 'Activo' | 'Liquidado' | 'En Mora' | 'Incobrable';
+export type EstatusPrestamo = 'Activo' | 'Pagado' | 'En Mora' | 'Cancelado' | 'Liquidado' | 'Incobrable';
 
 export interface Loan {
   id: string;
@@ -85,7 +105,7 @@ export interface Loan {
   tasaInteresGlobal: number;
   plazoCantidad: number;
   frecuenciaPago: FrecuenciaPago;
-  fechaInicio: string; // YYYY-MM-DD
+  fechaInicio: string;
   cuotaRegular: number;
   totalAPagar: number;
   saldoPendiente: number;
@@ -104,19 +124,9 @@ export interface PaymentRecord {
   numeroCuota: number;
   montoRecibido: number;
   penalizacionCobrada: number;
-  fechaPago: string; // YYYY-MM-DD HH:mm
+  fechaPago: string;
   metodoPago: 'Efectivo' | 'Transferencia' | 'Tarjeta';
   cobradorNombre: string;
   esAbonoParcial: boolean;
   nota?: string;
-}
-
-export interface DashboardMetrics {
-  totalCarteraActiva: number;
-  totalCobradoHoy: number;
-  metaCobroHoy: number;
-  indiceMorosidad: number;
-  totalClientesActivos: number;
-  prestamosEnMoraCount: number;
-  proyeccionIntereses: number;
 }

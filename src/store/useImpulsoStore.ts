@@ -259,7 +259,7 @@ export const useImpulsoStore = create<ImpulsoStoreState>()(
         const updatedInstallment: AmortizationInstallment = {
           ...installment,
           montoPagado: nuevoMontoPagado,
-          penalizacionesMora: installment.penalizacionesMora + penalizacionCobrada,
+          penalizacionesMora: (installment.penalizacionesMora || 0) + penalizacionCobrada,
           estado: esPagadoCompleto ? 'Pagado' : 'Parcial',
           fechaPagoReal: new Date().toISOString(),
         };

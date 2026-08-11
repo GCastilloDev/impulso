@@ -2,7 +2,7 @@
 
 import { db } from '@/lib/db';
 import bcrypt from 'bcryptjs';
-import { UserRole } from '@/types';
+import { UserRole, StructuredAddress, Reference } from '@/types';
 
 export async function getUsersAction(params?: {
   search?: string;
@@ -31,6 +31,8 @@ export async function getUsersAction(params?: {
         { name: { contains: q, mode: 'insensitive' } },
         { email: { contains: q, mode: 'insensitive' } },
         { telefono: { contains: q, mode: 'insensitive' } },
+        { curp: { contains: q, mode: 'insensitive' } },
+        { folioIne: { contains: q, mode: 'insensitive' } },
       ];
     }
 
@@ -50,6 +52,12 @@ export async function getUsersAction(params?: {
         estatus: u.estatus as 'Activo' | 'Inactivo',
         fechaAlta: u.fechaAlta.toISOString().split('T')[0],
         avatar: u.avatar || undefined,
+        curp: u.curp || undefined,
+        fechaNacimiento: u.fechaNacimiento || undefined,
+        folioIne: u.folioIne || undefined,
+        direccionEstructurada: (u.direccionEstructurada as unknown as StructuredAddress) || undefined,
+        referencia1: (u.referencia1 as unknown as Reference) || undefined,
+        referencia2: (u.referencia2 as unknown as Reference) || undefined,
       })),
     };
   } catch (error: any) {
@@ -65,6 +73,12 @@ export async function createUserAction(data: {
   role: UserRole;
   telefono?: string;
   avatar?: string;
+  curp?: string;
+  fechaNacimiento?: string;
+  folioIne?: string;
+  direccionEstructurada?: StructuredAddress;
+  referencia1?: Reference;
+  referencia2?: Reference;
   requesterRole?: UserRole;
 }) {
   try {
@@ -95,6 +109,12 @@ export async function createUserAction(data: {
         telefono: data.telefono?.trim() || null,
         avatar: data.avatar?.trim() || null,
         estatus: 'Activo',
+        curp: data.curp?.trim() || null,
+        fechaNacimiento: data.fechaNacimiento || null,
+        folioIne: data.folioIne?.trim() || null,
+        direccionEstructurada: data.direccionEstructurada ? (data.direccionEstructurada as any) : null,
+        referencia1: data.referencia1 ? (data.referencia1 as any) : null,
+        referencia2: data.referencia2 ? (data.referencia2 as any) : null,
       },
     });
 
@@ -110,6 +130,12 @@ export async function createUserAction(data: {
         estatus: newUser.estatus as 'Activo' | 'Inactivo',
         fechaAlta: newUser.fechaAlta.toISOString().split('T')[0],
         avatar: newUser.avatar || undefined,
+        curp: newUser.curp || undefined,
+        fechaNacimiento: newUser.fechaNacimiento || undefined,
+        folioIne: newUser.folioIne || undefined,
+        direccionEstructurada: (newUser.direccionEstructurada as unknown as StructuredAddress) || undefined,
+        referencia1: (newUser.referencia1 as unknown as Reference) || undefined,
+        referencia2: (newUser.referencia2 as unknown as Reference) || undefined,
       },
     };
   } catch (error: any) {
@@ -126,6 +152,12 @@ export async function updateUserAction(data: {
   telefono?: string;
   avatar?: string;
   newPassword?: string;
+  curp?: string;
+  fechaNacimiento?: string;
+  folioIne?: string;
+  direccionEstructurada?: StructuredAddress;
+  referencia1?: Reference;
+  referencia2?: Reference;
   requesterRole?: UserRole;
 }) {
   try {
@@ -158,6 +190,12 @@ export async function updateUserAction(data: {
       role: data.role,
       telefono: data.telefono?.trim() || null,
       avatar: data.avatar?.trim() || null,
+      curp: data.curp?.trim() || null,
+      fechaNacimiento: data.fechaNacimiento || null,
+      folioIne: data.folioIne?.trim() || null,
+      direccionEstructurada: data.direccionEstructurada ? (data.direccionEstructurada as any) : null,
+      referencia1: data.referencia1 ? (data.referencia1 as any) : null,
+      referencia2: data.referencia2 ? (data.referencia2 as any) : null,
     };
 
     if (data.newPassword && data.newPassword.trim().length > 0) {
@@ -181,6 +219,12 @@ export async function updateUserAction(data: {
         estatus: updatedUser.estatus as 'Activo' | 'Inactivo',
         fechaAlta: updatedUser.fechaAlta.toISOString().split('T')[0],
         avatar: updatedUser.avatar || undefined,
+        curp: updatedUser.curp || undefined,
+        fechaNacimiento: updatedUser.fechaNacimiento || undefined,
+        folioIne: updatedUser.folioIne || undefined,
+        direccionEstructurada: (updatedUser.direccionEstructurada as unknown as StructuredAddress) || undefined,
+        referencia1: (updatedUser.referencia1 as unknown as Reference) || undefined,
+        referencia2: (updatedUser.referencia2 as unknown as Reference) || undefined,
       },
     };
   } catch (error: any) {
