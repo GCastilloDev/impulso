@@ -1,0 +1,105 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("POSTGRES_PRISMA_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  password  String
+  role      String   @default("Promotor de Campo")
+  telefono  String?
+  estatus   String   @default("Activo")
+  fechaAlta DateTime @default(now())
+  avatar    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Client {
+  id                     String   @id @default(cuid())
+  folio                  String   @unique
+  nombre                 String
+  telefono               String
+  email                  String?
+  direccion              String
+  curp                   String
+  rfc                    String
+  scoreCrediticio        String   @default("Excelente")
+  promotorAsignadoId     String?
+  promotorAsignadoNombre String?
+  referencia1            Json?
+  referencia2            Json?
+  estatus                String   @default("Activo")
+  fechaRegistro          DateTime @default(now())
+  notas                  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model FinancialProduct {
+  id                         String   @id @default(cuid())
+  nombre                     String
+  descripcion                String
+  frecuenciaPago             String   @default("semanal")
+  plazosPosibles             Json
+  tasaInteresGlobal          Float
+  porcentajePenalizacionMora Float
+  montoMinimo                Float
+  montoMaximo                Float
+  activo                     Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Loan {
+  id                String   @id @default(cuid())
+  folio             String   @unique
+  clienteId         String
+  clienteNombre     String
+  clienteTelefono   String?
+  productoId        String
+  productoNombre    String
+  montoPrincipal    Float
+  tasaInteresGlobal Float
+  plazoCantidad     Int
+  frecuenciaPago    String
+  fechaInicio       String
+  cuotaRegular      Float
+  totalAPagar       Float
+  saldoPendiente    Float
+  estatus           String   @default("Activo")
+  promotorAsignado  String
+  tablaAmortizacion Json
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model PaymentRecord {
+  id                  String   @id @default(cuid())
+  folioRecibo         String   @unique
+  prestamoId          String
+  prestamoFolio       String
+  clienteId           String
+  clienteNombre       String
+  numeroCuota         Int
+  montoRecibido       Float
+  penalizacionCobrada Float    @default(0)
+  fechaPago           DateTime @default(now())
+  metodoPago          String   @default("Efectivo")
+  cobradorNombre      String
+  esAbonoParcial      Boolean  @default(false)
+  nota                String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

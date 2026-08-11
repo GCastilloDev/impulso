@@ -15,6 +15,7 @@ import {
   ChevronLeft,
   UserCog,
   ShieldAlert,
+  Loader2,
 } from 'lucide-react';
 import { useImpulsoStore } from '@/store/useImpulsoStore';
 import { CreditScoreBadge } from '@/components/shared/StatusBadges';
@@ -42,10 +43,12 @@ export default function ClientsPage() {
 
   // Modal State - Nuevo Cliente
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Modal State - Reasignar Promotor
   const [clientToReassign, setClientToReassign] = useState<Client | null>(null);
   const [selectedNewPromotorId, setSelectedNewPromotorId] = useState<string>('');
+  const [isReassigning, setIsReassigning] = useState(false);
 
   // Form State - Datos Personales
   const [nombre, setNombre] = useState('');
@@ -133,75 +136,86 @@ export default function ClientsPage() {
   const startIndex = (validCurrentPage - 1) * itemsPerPage;
   const paginatedClients = visibleClients.slice(startIndex, startIndex + itemsPerPage);
 
-  const handleCreateClient = (e: React.FormEvent) => {
+  const handleCreateClient = async (e: React.FormEvent) => {
     e.preventDefault();
-    const assignedUser = users.find((u) => u.id === promotorAsignadoId);
+    if (isSubmitting) return;
 
-    addClient({
-      nombre,
-      telefono,
-      email,
-      direccion,
-      curp,
-      rfc,
-      scoreCrediticio,
-      promotorAsignadoId: assignedUser ? assignedUser.id : undefined,
-      promotorAsignadoNombre: assignedUser ? assignedUser.name : undefined,
-      referencia1: {
-        nombre: ref1Nombre,
-        parentesco: ref1Parentesco,
-        telefono: ref1Telefono,
-        direccion: ref1Direccion,
-      },
-      referencia2: {
-        nombre: ref2Nombre,
-        parentesco: ref2Parentesco,
-        telefono: ref2Telefono,
-        direccion: ref2Direccion,
-      },
-      estatus: 'Activo',
-    });
+    setIsSubmitting(true);
+    try {
+      const assignedUser = users.find((u) => u.id === promotorAsignadoId);
 
-    setIsModalOpen(false);
-    // Reset Form
-    setNombre('');
-    setTelefono('');
-    setEmail('');
-    setDireccion('');
-    setCurp('');
-    setRfc('');
-    setScoreCrediticio('Excelente');
-    setPromotorAsignadoId('');
-    setRef1Nombre('');
-    setRef1Parentesco('Familiar');
-    setRef1Telefono('');
-    setRef1Direccion('');
-    setRef2Nombre('');
-    setRef2Parentesco('Amigo');
-    setRef2Telefono('');
-    setRef2Direccion('');
+      addClient({
+        nombre,
+        telefono,
+        email,
+        direccion,
+        curp,
+        rfc,
+        scoreCrediticio,
+        promotorAsignadoId: assignedUser ? assignedUser.id : undefined,
+        promotorAsignadoNombre: assignedUser ? assignedUser.name : undefined,
+        referencia1: {
+          nombre: ref1Nombre,
+          parentesco: ref1Parentesco,
+          telefono: ref1Telefono,
+          direccion: ref1Direccion,
+        },
+        referencia2: {
+          nombre: ref2Nombre,
+          parentesco: ref2Parentesco,
+          telefono: ref2Telefono,
+          direccion: ref2Direccion,
+        },
+        estatus: 'Activo',
+      });
+
+      setIsModalOpen(false);
+      // Reset Form
+      setNombre('');
+      setTelefono('');
+      setEmail('');
+      setDireccion('');
+      setCurp('');
+      setRfc('');
+      setScoreCrediticio('Excelente');
+      setPromotorAsignadoId('');
+      setRef1Nombre('');
+      setRef1Parentesco('Familiar');
+      setRef1Telefono('');
+      setRef1Direccion('');
+      setRef2Nombre('');
+      setRef2Parentesco('Amigo');
+      setRef2Telefono('');
+      setRef2Direccion('');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleConfirmReassign = () => {
-    if (!clientToReassign) return;
+  const handleConfirmReassign = async () => {
+    if (!clientToReassign || isReassigning) return;
 
-    if (!selectedNewPromotorId) {
-      // Sin Asignar (Solo Administración)
-      updateClient(clientToReassign.id, {
-        promotorAsignadoId: undefined,
-        promotorAsignadoNombre: undefined,
-      });
-    } else {
-      const targetPromotor = users.find((u) => u.id === selectedNewPromotorId);
-      if (targetPromotor) {
+    setIsReassigning(true);
+    try {
+      if (!selectedNewPromotorId) {
         updateClient(clientToReassign.id, {
-          promotorAsignadoId: targetPromotor.id,
-          promotorAsignadoNombre: targetPromotor.name,
+          promotorAsignadoId: undefined,
+          promotorAsignadoNombre: undefined,
         });
+      } else {
+        const targetPromotor = users.find((u) => u.id === selectedNewPromotorId);
+        if (targetPromotor) {
+          updateClient(clientToReassign.id, {
+            promotorAsignadoId: targetPromotor.id,
+            promotorAsignadoNombre: targetPromotor.name,
+          });
+        }
       }
-    }
 
-    setClientToReassign(null);
+      setClientToReassign(null);
+    } finally {
+      setIsReassigning(false);
+    }
   };
 
   return (
@@ -475,17 +489,25 @@ export default function ClientsPage() {
             <div className="pt-3 flex justify-end gap-3 border-t border-slate-800">
               <button
                 type="button"
+                disabled={isReassigning}
                 onClick={() => setClientToReassign(null)}
-                className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-semibold text-xs"
+                className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-semibold text-xs disabled:opacity-50"
               >
                 Cancelar
               </button>
               <button
                 type="button"
+                disabled={isReassigning}
                 onClick={handleConfirmReassign}
-                className="px-5 py-2 rounded-xl bg-emerald-500 text-slate-950 font-black text-xs shadow-lg shadow-emerald-500/20"
+                className="px-5 py-2 rounded-xl bg-emerald-500 text-slate-950 font-black text-xs shadow-lg shadow-emerald-500/20 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Guardar Cambios
+                {isReassigning ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" /> Guardando...
+                  </>
+                ) : (
+                  'Guardar Cambios'
+                )}
               </button>
             </div>
           </div>
@@ -768,16 +790,24 @@ export default function ClientsPage() {
               <div className="pt-3 flex items-center justify-end gap-3 border-t border-slate-800">
                 <button
                   type="button"
+                  disabled={isSubmitting}
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 font-semibold text-xs transition-all"
+                  className="px-4 py-2 rounded-xl text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 font-semibold text-xs transition-all disabled:opacity-50"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2.5 rounded-xl text-slate-950 bg-emerald-500 hover:bg-emerald-400 font-extrabold text-xs shadow-lg shadow-emerald-500/20 transition-all"
+                  disabled={isSubmitting}
+                  className="px-6 py-2.5 rounded-xl text-slate-950 bg-emerald-500 hover:bg-emerald-400 font-extrabold text-xs shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Registrar Cliente Completo
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Guardando Cliente...
+                    </>
+                  ) : (
+                    'Registrar Cliente Completo'
+                  )}
                 </button>
               </div>
             </form>

@@ -15,6 +15,7 @@ import {
   Receipt,
   UserCheck,
   Filter,
+  Loader2,
 } from 'lucide-react';
 import { useImpulsoStore } from '@/store/useImpulsoStore';
 import { InstallmentStatusBadge } from '@/components/shared/StatusBadges';
@@ -121,32 +122,41 @@ export default function CollectionPage() {
     setFeedbackMessage(null);
   };
 
-  const handleRegisterPayment = (e: React.FormEvent) => {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleRegisterPayment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedItem) return;
+    if (!selectedItem || isSubmitting) return;
 
-    const result = registerPayment({
-      prestamoId: selectedItem.loan.id,
-      numeroCuota: selectedItem.installment.numeroCuota,
-      montoRecibido: Number(montoRecibido),
-      penalizacionCobrada: Number(penalizacionCobrada),
-      metodoPago,
-      nota,
-    });
-
-    if (result.success) {
-      // Trigger Confetti Effect
-      confetti({
-        particleCount: 80,
-        spread: 70,
-        origin: { y: 0.6 },
+    setIsSubmitting(true);
+    try {
+      const result = registerPayment({
+        prestamoId: selectedItem.loan.id,
+        numeroCuota: selectedItem.installment.numeroCuota,
+        montoRecibido: Number(montoRecibido),
+        penalizacionCobrada: Number(penalizacionCobrada),
+        metodoPago,
+        nota,
       });
 
-      setFeedbackMessage(result.message);
-      setTimeout(() => {
-        setSelectedItem(null);
-        setFeedbackMessage(null);
-      }, 1800);
+      if (result.success) {
+        // Trigger Confetti Effect
+        confetti({
+          particleCount: 80,
+          spread: 60,
+          origin: { y: 0.7 },
+        });
+
+        setFeedbackMessage('¡Pago registrado con éxito!');
+        setTimeout(() => {
+          setSelectedItem(null);
+          setFeedbackMessage(null);
+        }, 1200);
+      } else {
+        setFeedbackMessage(result.message);
+      }
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -426,16 +436,24 @@ export default function CollectionPage() {
                 <div className="pt-3 flex gap-2">
                   <button
                     type="button"
+                    disabled={isSubmitting}
                     onClick={() => setSelectedItem(null)}
-                    className="w-1/3 py-3 rounded-xl bg-slate-800 text-slate-300 font-semibold text-xs"
+                    className="w-1/3 py-3 rounded-xl bg-slate-800 text-slate-300 font-semibold text-xs disabled:opacity-50"
                   >
                     Cancelar
                   </button>
                   <button
                     type="submit"
-                    className="w-2/3 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-xs shadow-lg shadow-emerald-500/20"
+                    disabled={isSubmitting}
+                    className="w-2/3 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-xs shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Confirmar Cobro
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" /> Registrando...
+                      </>
+                    ) : (
+                      'Confirmar Cobro'
+                    )}
                   </button>
                 </div>
               </form>

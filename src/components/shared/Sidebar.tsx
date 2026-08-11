@@ -33,6 +33,8 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     router.push('/login');
   };
 
+  const isAdmin = currentUser.role === 'Administrador';
+
   const navItems = [
     {
       name: 'Dashboard Ejecutivos',
@@ -55,11 +57,15 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       href: '/clientes',
       icon: Users,
     },
-    {
-      name: 'Gestión de Personal',
-      href: '/usuarios',
-      icon: UserCog,
-    },
+    ...(isAdmin
+      ? [
+          {
+            name: 'Gestión de Personal',
+            href: '/usuarios',
+            icon: UserCog,
+          },
+        ]
+      : []),
     {
       name: 'Productos Financieros',
       href: '/productos',

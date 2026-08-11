@@ -23,6 +23,7 @@ interface ImpulsoStoreState {
   // Autenticación & Sesión
   isAuthenticated: boolean;
   currentUser: User;
+  setCurrentUser: (user: User) => void;
   login: (email: string, password?: string) => { success: boolean; message: string; user?: User };
   logout: () => void;
 
@@ -71,6 +72,8 @@ export const useImpulsoStore = create<ImpulsoStoreState>()(
       currentUser: INITIAL_USER,
       users: MOCK_USERS,
 
+      setCurrentUser: (user) => set({ currentUser: user, isAuthenticated: true }),
+
       login: (email, password) => {
         const state = get();
         const foundUser = state.users.find(
@@ -87,7 +90,14 @@ export const useImpulsoStore = create<ImpulsoStoreState>()(
         if (foundUser.estatus === 'Inactivo') {
           return {
             success: false,
-            message: 'El usuario se encuentra inactivo. Contacta a un Administrador.',
+            message: '⛔ Acceso Denegado: Tu cuenta de colaborador se encuentra INACTIVA. Un Administrador ha deshabilitado tu acceso al sistema. Comunícate con la administración para reactivar tu cuenta.',
+          };
+        }
+
+        if (password && foundUser.password && foundUser.password !== password) {
+          return {
+            success: false,
+            message: 'La contraseña ingresada es incorrecta.',
           };
         }
 
