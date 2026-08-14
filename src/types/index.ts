@@ -39,17 +39,19 @@ export interface User {
 
 export type FrecuenciaPago = 'diario' | 'semanal' | 'quincenal' | 'mensual';
 
+export type TipoPenalizacionMora = 'porcentaje' | 'monto_fijo';
+
 export interface FinancialProduct {
   id: string;
   nombre: string;
   descripcion: string;
   frecuenciaPago: FrecuenciaPago;
-  plazosPosibles: number[]; // Ej: [4, 8, 12, 16] o [6, 12]
+  plazo: number; // Plazo único (número de cuotas, ej: 10)
   tasaInteresGlobal: number; // Porcentaje global fijo (ej. 15%)
-  porcentajePenalizacionMora: number; // Porcentaje por pago vencido (ej. 5%)
-  montoMinimo: number;
-  montoMaximo: number;
+  tipoPenalizacionMora: TipoPenalizacionMora; // 'porcentaje' o 'monto_fijo'
+  valorPenalizacionMora: number; // Aplicado por cada cuota/pago atrasado según frecuencia
   activo: boolean;
+  eliminado?: boolean;
 }
 
 export type ScoreCrediticio = 'Excelente' | 'Bueno' | 'Regular' | 'Alto Riesgo';
@@ -65,15 +67,13 @@ export interface Client {
   curp: string;
   folioIne: string;
   rfc?: string;
-  limiteCredito?: number;
   scoreCrediticio: ScoreCrediticio;
-  referencia1: Reference;
+  referencia1?: Reference;
   referencia2?: Reference;
   promotorAsignadoId?: string | null;
   promotorAsignadoNombre?: string | null;
   estatus: 'Activo' | 'Inactivo' | 'Bloqueado';
   fechaRegistro: string;
-  notas?: string;
 }
 
 export type EstadoCuota = 'Pendiente' | 'Pagado' | 'Mora' | 'Parcial';
@@ -92,7 +92,7 @@ export interface AmortizationInstallment {
   penalizacionesMora?: number;
 }
 
-export type EstatusPrestamo = 'Activo' | 'Pagado' | 'En Mora' | 'Cancelado' | 'Liquidado' | 'Incobrable';
+export type EstatusPrestamo = 'En Evaluación' | 'Aprobado' | 'Rechazado' | 'Activo' | 'Pagado' | 'En Mora' | 'Cancelado' | 'Liquidado' | 'Incobrable';
 
 export interface Loan {
   id: string;
@@ -112,6 +112,8 @@ export interface Loan {
   saldoPendiente: number;
   estatus: EstatusPrestamo;
   promotorAsignado: string;
+  motivoRechazo?: string;
+  creadoPorRol?: UserRole;
   tablaAmortizacion: AmortizationInstallment[];
 }
 

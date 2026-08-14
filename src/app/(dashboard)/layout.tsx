@@ -14,12 +14,13 @@ export default function DashboardLayout({
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [hasMounted, setHasMounted] = useState(false);
-  const { isAuthenticated } = useImpulsoStore();
+  const { isAuthenticated, loadDataFromDB } = useImpulsoStore();
   const router = useRouter();
 
   useEffect(() => {
     setHasMounted(true);
-  }, []);
+    loadDataFromDB();
+  }, [loadDataFromDB]);
 
   useEffect(() => {
     if (hasMounted && !isAuthenticated) {

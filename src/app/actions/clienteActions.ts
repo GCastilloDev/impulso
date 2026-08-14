@@ -155,7 +155,6 @@ export async function createClientAction(data: Omit<Client, 'id' | 'folio' | 'fe
         referencia1: data.referencia1 ? (data.referencia1 as any) : null,
         referencia2: data.referencia2 ? (data.referencia2 as any) : null,
         estatus: 'Activo',
-        notas: data.notas || null,
       },
     });
 

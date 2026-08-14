@@ -62,6 +62,18 @@ export function addMonths(dateString: string, months: number): string {
   return `${year}-${month}-${day}`;
 }
 
+/**
+ * Formatea un número de teléfono de 10 dígitos para visualización uniforme (ej. 5511223344 -> 55 1122 3344)
+ */
+export function formatPhoneNumber(phone?: string | null): string {
+  if (!phone) return '';
+  const digits = phone.replace(/\D/g, '');
+  if (digits.length === 10) {
+    return `${digits.slice(0, 2)} ${digits.slice(2, 6)} ${digits.slice(6)}`;
+  }
+  return phone;
+}
+
 // ----------------------------------------------------
 // UTILIDADES Y REGLAS DE VALIDACIÓN DE FORMULARIOS
 // ----------------------------------------------------

@@ -55,19 +55,19 @@ model Client {
 }
 
 model FinancialProduct {
-  id                         String   @id @default(cuid())
-  nombre                     String
-  descripcion                String
-  frecuenciaPago             String   @default("semanal")
-  plazosPosibles             Json
-  tasaInteresGlobal          Float
-  porcentajePenalizacionMora Float
-  montoMinimo                Float
-  montoMaximo                Float
-  activo                     Boolean  @default(true)
+  id                    String   @id @default(cuid())
+  nombre                String
+  descripcion           String
+  frecuenciaPago        String   @default("semanal")
+  plazo                 Int      @default(10)
+  tasaInteresGlobal     Float
+  tipoPenalizacionMora  String   @default("porcentaje")
+  valorPenalizacionMora Float    @default(0)
+  activo                Boolean  @default(true)
+  eliminado             Boolean  @default(false)
 
-  createdAt                  DateTime @default(now())
-  updatedAt                  DateTime @updatedAt
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 }
 
 model Loan {
@@ -88,6 +88,8 @@ model Loan {
   saldoPendiente    Float
   estatus           String   @default("Activo")
   promotorAsignado  String
+  motivoRechazo     String?
+  creadoPorRol      String?
   tablaAmortizacion Json
 
   createdAt         DateTime @default(now())

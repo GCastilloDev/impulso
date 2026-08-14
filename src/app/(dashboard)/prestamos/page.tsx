@@ -1,28 +1,83 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { Banknote, Search, Plus, Calendar, Eye, AlertTriangle, ShieldCheck, Filter } from 'lucide-react';
+import { Banknote, Search, Plus, Calendar, Eye, AlertTriangle, ShieldCheck, Filter, CheckCircle2, XCircle, Clock, Loader2, AlertCircle } from 'lucide-react';
 import { useImpulsoStore } from '@/store/useImpulsoStore';
 import { LoanStatusBadge, InstallmentStatusBadge } from '@/components/shared/StatusBadges';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { Loan } from '@/types';
+import { approveLoanAction, rejectLoanAction } from '@/app/actions/loanActions';
 
 export default function LoansPage() {
-  const { loans } = useImpulsoStore();
+  const { loans, currentUser, loadDataFromDB } = useImpulsoStore();
+  const isAdmin = currentUser.role === 'Administrador';
+
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('todos');
   const [selectedLoanModal, setSelectedLoanModal] = useState<Loan | null>(null);
 
+  // Modal para rechazo de préstamo (Administrador)
+  const [rejectModalLoan, setRejectModalLoan] = useState<Loan | null>(null);
+  const [motivoRechazoInput, setMotivoRechazoInput] = useState('');
+  const [rejectError, setRejectError] = useState<string | null>(null);
+  const [isProcessingAction, setIsProcessingAction] = useState(false);
+  const rejectModalScrollRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && selectedLoanModal) {
-        setSelectedLoanModal(null);
+      if (e.key === 'Escape') {
+        if (rejectModalLoan) {
+          setRejectModalLoan(null);
+          setMotivoRechazoInput('');
+          setRejectError(null);
+        } else if (selectedLoanModal) {
+          setSelectedLoanModal(null);
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedLoanModal]);
+  }, [selectedLoanModal, rejectModalLoan]);
+
+  const handleApprove = async (loanId: string) => {
+    if (isProcessingAction) return;
+    setIsProcessingAction(true);
+    try {
+      await approveLoanAction(loanId);
+      await loadDataFromDB();
+    } catch (err) {
+      console.error('Error al aprobar préstamo:', err);
+    } finally {
+      setIsProcessingAction(false);
+    }
+  };
+
+  const handleConfirmReject = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!rejectModalLoan || isProcessingAction) return;
+
+    // Validar motivo obligatorio (Regla de validación de formulario)
+    if (!motivoRechazoInput.trim()) {
+      setRejectError('Por favor ingresa el motivo del rechazo.');
+      if (rejectModalScrollRef.current) rejectModalScrollRef.current.scrollTop = 0;
+      return;
+    }
+
+    setIsProcessingAction(true);
+    try {
+      await rejectLoanAction(rejectModalLoan.id, motivoRechazoInput.trim());
+      await loadDataFromDB();
+
+      setRejectModalLoan(null);
+      setMotivoRechazoInput('');
+      setRejectError(null);
+    } catch (err) {
+      console.error('Error al rechazar préstamo:', err);
+    } finally {
+      setIsProcessingAction(false);
+    }
+  };
 
   const filteredLoans = loans.filter((loan) => {
     const matchesSearch =
@@ -42,10 +97,10 @@ export default function LoansPage() {
         <div>
           <h1 className="text-2xl font-extrabold text-white flex items-center gap-2 tracking-tight">
             <Banknote className="w-7 h-7 text-emerald-400" />
-            Gestión de Préstamos Activos
+            Gestión de Préstamos y Solicitudes
           </h1>
           <p className="text-sm text-slate-400">
-            Monitoreo de cartera, tablas de amortización y estado de saldos pendientes.
+            Monitoreo de cartera, aprobación de solicitudes y tablas de amortización.
           </p>
         </div>
 
@@ -80,9 +135,11 @@ export default function LoansPage() {
             className="px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500"
           >
             <option value="todos">Todos los estatus</option>
+            <option value="En Evaluación">En Evaluación (Pendientes)</option>
             <option value="Activo">Activos</option>
             <option value="En Mora">En Mora</option>
             <option value="Liquidado">Liquidados</option>
+            <option value="Rechazado">Rechazados</option>
           </select>
         </div>
       </div>
@@ -90,16 +147,16 @@ export default function LoansPage() {
       {/* Loans Table */}
       <div className="glass-panel rounded-2xl border border-slate-800 overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-slate-900/90 text-slate-400 font-semibold border-b border-slate-800 uppercase tracking-wider">
+          <table className="w-full text-left text-xs min-w-[950px]">
+            <thead className="bg-slate-900/90 text-slate-400 font-semibold border-b border-slate-800 uppercase tracking-wider whitespace-nowrap">
               <tr>
-                <th className="p-4">Folio & Cliente</th>
-                <th className="p-4">Producto / Frecuencia</th>
-                <th className="p-4">Monto Prestado</th>
-                <th className="p-4">Saldo Pendiente</th>
-                <th className="p-4">Cuota Regular</th>
-                <th className="p-4">Estatus</th>
-                <th className="p-4 text-right">Tabla Amortización</th>
+                <th className="p-4 min-w-[180px]">Folio & Cliente</th>
+                <th className="p-4 min-w-[180px]">Producto / Frecuencia</th>
+                <th className="p-4 min-w-[130px]">Monto Prestado</th>
+                <th className="p-4 min-w-[140px]">Saldo Pendiente</th>
+                <th className="p-4 min-w-[120px]">Cuota Regular</th>
+                <th className="p-4 min-w-[130px]">Estatus</th>
+                <th className="p-4 text-right min-w-[210px]">Acciones & Amortización</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/80">
@@ -139,13 +196,44 @@ export default function LoansPage() {
                   </td>
 
                   <td className="p-4 text-right">
-                    <button
-                      onClick={() => setSelectedLoanModal(loan)}
-                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-indigo-300 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 transition-all"
-                    >
-                      <Eye className="w-3.5 h-3.5" />
-                      Ver Tabla
-                    </button>
+                    <div className="flex items-center justify-end gap-2">
+                      {/* Botones de Dictamen para Administrador en solicitudes En Evaluación */}
+                      {isAdmin && loan.estatus === 'En Evaluación' && (
+                        <>
+                          <button
+                            disabled={isProcessingAction}
+                            onClick={() => handleApprove(loan.id)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30 transition-all disabled:opacity-50"
+                            title="Aprobar Solicitud y Activar Crédito"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            Aprobar
+                          </button>
+
+                          <button
+                            disabled={isProcessingAction}
+                            onClick={() => {
+                              setRejectModalLoan(loan);
+                              setMotivoRechazoInput('');
+                              setRejectError(null);
+                            }}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40 hover:bg-rose-500/30 transition-all disabled:opacity-50"
+                            title="Rechazar Solicitud"
+                          >
+                            <XCircle className="w-3.5 h-3.5" />
+                            Rechazar
+                          </button>
+                        </>
+                      )}
+
+                      <button
+                        onClick={() => setSelectedLoanModal(loan)}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-indigo-300 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 transition-all"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        Ver Tabla
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -162,25 +250,56 @@ export default function LoansPage() {
         </div>
       </div>
 
-      {/* Modal Ver Tabla de Amortización */}
+      {/* Modal Ver Tabla de Amortización & Detalle */}
       {selectedLoanModal && (
         <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="glass-panel w-full max-w-3xl p-6 rounded-2xl border border-slate-800 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-start border-b border-slate-800 pb-3">
               <div>
-                <span className="font-mono text-xs font-bold text-emerald-400">{selectedLoanModal.folio}</span>
-                <h2 className="text-xl font-extrabold text-white">{selectedLoanModal.clienteNombre}</h2>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-xs font-bold text-emerald-400">{selectedLoanModal.folio}</span>
+                  <LoanStatusBadge status={selectedLoanModal.estatus} />
+                </div>
+                <h2 className="text-xl font-extrabold text-white mt-1">{selectedLoanModal.clienteNombre}</h2>
                 <p className="text-xs text-slate-400">
-                  Producto: {selectedLoanModal.productoNombre} ({selectedLoanModal.plazoCantidad} cuotas {selectedLoanModal.frecuenciaPago}s)
+                  Producto: {selectedLoanModal.productoNombre} ({selectedLoanModal.plazoCantidad} cuotas {selectedLoanModal.frecuenciaPago}s) • Promotor: {selectedLoanModal.promotorAsignado}
                 </p>
               </div>
               <button
+                type="button"
                 onClick={() => setSelectedLoanModal(null)}
                 className="px-3 py-1 rounded-lg text-slate-400 hover:text-white bg-slate-800 text-xs"
+                title="Cerrar modal (Esc)"
               >
-                Cerrar ✕
+                ✕
               </button>
             </div>
+
+            {/* Banner de Rechazo si aplica */}
+            {selectedLoanModal.estatus === 'Rechazado' && selectedLoanModal.motivoRechazo && (
+              <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/40 text-rose-300 text-xs space-y-1">
+                <div className="flex items-center gap-2 font-bold text-rose-400">
+                  <XCircle className="w-4 h-4 shrink-0" />
+                  <span>Solicitud de Crédito Rechazada</span>
+                </div>
+                <p className="text-slate-300 pl-6">
+                  <strong>Motivo especificado por el Administrador:</strong> "{selectedLoanModal.motivoRechazo}"
+                </p>
+              </div>
+            )}
+
+            {/* Banner de Evaluación si aplica */}
+            {selectedLoanModal.estatus === 'En Evaluación' && (
+              <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/40 text-amber-300 text-xs space-y-1">
+                <div className="flex items-center gap-2 font-bold text-amber-400">
+                  <Clock className="w-4 h-4 shrink-0" />
+                  <span>Solicitud Pendiente de Evaluación</span>
+                </div>
+                <p className="text-slate-300 pl-6">
+                  Esta solicitud ingresada por un Promotor de Campo está pendiente de aprobación o rechazo por parte de un Administrador.
+                </p>
+              </div>
+            )}
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
               <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
@@ -225,6 +344,94 @@ export default function LoansPage() {
                 </tbody>
               </table>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal para Rechazar Solicitud de Crédito (Con Motivo Obligatorio) */}
+      {rejectModalLoan && (
+        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-4">
+          <div ref={rejectModalScrollRef} className="glass-panel w-full max-w-md p-6 rounded-2xl border border-slate-800 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center pb-2 border-b border-slate-800">
+              <h2 className="text-lg font-extrabold text-white flex items-center gap-2">
+                <XCircle className="w-5 h-5 text-rose-400" />
+                Rechazar Solicitud de Crédito
+              </h2>
+              <button
+                type="button"
+                disabled={isProcessingAction}
+                onClick={() => {
+                  setRejectModalLoan(null);
+                  setMotivoRechazoInput('');
+                  setRejectError(null);
+                }}
+                className="text-slate-400 hover:text-white p-1 text-base disabled:opacity-50"
+                title="Cerrar modal (Esc)"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-xs space-y-1">
+              <p className="text-slate-400">Solicitud Folio: <strong className="text-emerald-400 font-mono">{rejectModalLoan.folio}</strong></p>
+              <p className="text-white font-bold">{rejectModalLoan.clienteNombre}</p>
+              <p className="text-slate-400">Monto: {formatCurrency(rejectModalLoan.montoPrincipal)} • Producto: {rejectModalLoan.productoNombre}</p>
+            </div>
+
+            {/* Error Banner */}
+            {rejectError && (
+              <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/40 text-rose-300 text-xs font-semibold flex items-center gap-2.5 shadow-lg shadow-rose-500/10">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                <span>{rejectError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleConfirmReject} noValidate className="space-y-4 text-xs">
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">
+                  Motivo de Rechazo * <span className="text-slate-400 font-normal">(Obligatorio)</span>
+                </label>
+                <textarea
+                  required
+                  rows={4}
+                  disabled={isProcessingAction}
+                  placeholder="Explique detalladamente la razón por la cual se rechaza esta solicitud de crédito..."
+                  value={motivoRechazoInput}
+                  onChange={(e) => setMotivoRechazoInput(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-rose-500 disabled:opacity-50"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2 border-t border-slate-800">
+                <button
+                  type="button"
+                  disabled={isProcessingAction}
+                  onClick={() => {
+                    setRejectModalLoan(null);
+                    setMotivoRechazoInput('');
+                    setRejectError(null);
+                  }}
+                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-semibold text-xs disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isProcessingAction}
+                  className="px-5 py-2 rounded-xl bg-rose-500 hover:bg-rose-400 text-white font-extrabold text-xs shadow-lg shadow-rose-500/20 flex items-center gap-2 disabled:opacity-50"
+                >
+                  {isProcessingAction ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Procesando...
+                    </>
+                  ) : (
+                    <>
+                      <XCircle className="w-3.5 h-3.5" /> Confirmar Rechazo
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

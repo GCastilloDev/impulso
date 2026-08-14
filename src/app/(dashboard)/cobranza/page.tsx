@@ -21,6 +21,7 @@ import { useImpulsoStore } from '@/store/useImpulsoStore';
 import { InstallmentStatusBadge } from '@/components/shared/StatusBadges';
 import { formatCurrency, formatDate, getTodayDateString } from '@/lib/utils';
 import { AmortizationInstallment, Loan } from '@/types';
+import { registerPaymentAction } from '@/app/actions/paymentActions';
 
 interface CollectionItem {
   loan: Loan;
@@ -30,7 +31,7 @@ interface CollectionItem {
 }
 
 export default function CollectionPage() {
-  const { loans, clients, users, registerPayment, currentUser } = useImpulsoStore();
+  const { loans, clients, users, currentUser, loadDataFromDB } = useImpulsoStore();
   const todayStr = getTodayDateString();
 
   const isPromotorUser = currentUser.role === 'Promotor de Campo';
@@ -143,7 +144,7 @@ export default function CollectionPage() {
 
     setIsSubmitting(true);
     try {
-      const result = registerPayment({
+      const result = await registerPaymentAction({
         prestamoId: selectedItem.loan.id,
         numeroCuota: selectedItem.installment.numeroCuota,
         montoRecibido: Number(montoRecibido),
@@ -154,6 +155,7 @@ export default function CollectionPage() {
       });
 
       if (result.success) {
+        await loadDataFromDB();
         // Trigger Confetti Effect
         confetti({
           particleCount: 80,
@@ -167,7 +169,7 @@ export default function CollectionPage() {
           setFeedbackMessage(null);
         }, 1200);
       } else {
-        setFeedbackMessage(result.message);
+        setFeedbackMessage(result.message || 'Error al registrar pago.');
       }
     } finally {
       setIsSubmitting(false);

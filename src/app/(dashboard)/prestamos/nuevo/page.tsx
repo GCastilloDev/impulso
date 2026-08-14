@@ -7,45 +7,97 @@ import { Banknote, ArrowLeft, Calculator, Calendar, CheckCircle2, User, Percent,
 import { useImpulsoStore } from '@/store/useImpulsoStore';
 import { calculateAmortizationSchedule } from '@/lib/financialCalculators';
 import { formatCurrency, formatDate, getTodayDateString } from '@/lib/utils';
+import { createLoanAction } from '@/app/actions/loanActions';
+import { SearchableSelect } from '@/components/shared/SearchableSelect';
 
 function LoanFormContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const defaultClientId = searchParams.get('clienteId') || '';
 
-  const { clients, products, addLoan } = useImpulsoStore();
+  const { clients, products, users, currentUser, loadDataFromDB } = useImpulsoStore();
 
-  const activeProducts = products.filter((p) => p.activo);
-  const activeClients = clients.filter((c) => c.estatus === 'Activo');
+  const isAdmin = currentUser.role === 'Administrador';
+  const isPromotor = currentUser.role === 'Promotor de Campo';
+
+  const activeProducts = products.filter((p) => p.activo && !p.eliminado);
+  
+  // Si es promotor, solo puede otorgar crédito a sus clientes asignados
+  const activeClients = isPromotor
+    ? clients.filter((c) => c.estatus === 'Activo' && (c.promotorAsignadoId === currentUser.id || c.promotorAsignadoNombre === currentUser.name))
+    : clients.filter((c) => c.estatus === 'Activo');
+
+  const activePromotores = users.filter(
+    (u) => u.estatus === 'Activo' && (u.role === 'Promotor de Campo' || u.role === 'Administrador')
+  );
+
+  // Opciones formateadas para los buscadores internos (máximo 4 iniciales)
+  const clientOptions = activeClients.map((c) => ({
+    id: c.id,
+    label: c.nombre,
+    sublabel: c.folio,
+    searchValue: `${c.nombre} ${c.folio} ${c.curp || ''}`,
+  }));
+
+  const productOptions = activeProducts.map((p) => ({
+    id: p.id,
+    label: p.nombre,
+    sublabel: `Tasa: ${p.tasaInteresGlobal}% • ${p.frecuenciaPago}`,
+    searchValue: `${p.nombre} ${p.frecuenciaPago}`,
+  }));
+
+  const promoterOptions = activePromotores.map((p) => ({
+    id: p.name,
+    label: p.name,
+    sublabel: p.role,
+    searchValue: `${p.name} ${p.role}`,
+  }));
 
   // Form State
-  const [selectedClientId, setSelectedClientId] = useState(defaultClientId || (activeClients[0]?.id || ''));
-  const [selectedProductId, setSelectedProductId] = useState(activeProducts[0]?.id || '');
-  const [montoPrincipal, setMontoPrincipal] = useState<number>(10000);
-  const [plazoCantidad, setPlazoCantidad] = useState<number>(10);
+  const [selectedClientId, setSelectedClientId] = useState(defaultClientId || '');
+  const [selectedProductId, setSelectedProductId] = useState('');
+  const [montoPrincipal, setMontoPrincipal] = useState<number | ''>('');
+  const [plazoCantidad, setPlazoCantidad] = useState<number | ''>('');
   const [fechaInicio, setFechaInicio] = useState<string>(getTodayDateString());
-  const [promotorAsignado, setPromotorAsignado] = useState('Pedro Ramírez');
+  const [promotorAsignado, setPromotorAsignado] = useState(
+    currentUser.name || ''
+  );
 
   const selectedClient = activeClients.find((c) => c.id === selectedClientId);
   const selectedProduct = activeProducts.find((p) => p.id === selectedProductId);
 
-  // Auto-set initial default parameters when product changes
+  // Auto-set default plazo when product changes
   useEffect(() => {
     if (selectedProduct) {
-      setMontoPrincipal(selectedProduct.montoMinimo || 5000);
-      if (selectedProduct.plazosPosibles.length > 0) {
-        setPlazoCantidad(selectedProduct.plazosPosibles[0]);
+      const defaultPlazo = selectedProduct.plazo || (Array.isArray((selectedProduct as any).plazosPosibles) ? (selectedProduct as any).plazosPosibles[0] : 10);
+      setPlazoCantidad(Number(defaultPlazo) || '');
+    }
+  }, [selectedProduct]);
+
+  // Preselect promotorAsignado with current logged-in user in both cases (Admin can change, Promotor is locked)
+  useEffect(() => {
+    if (isPromotor) {
+      setPromotorAsignado(currentUser.name);
+    } else if (!promotorAsignado) {
+      if (selectedClient && selectedClient.promotorAsignadoNombre && selectedClient.promotorAsignadoNombre !== 'Sin asignar') {
+        setPromotorAsignado(selectedClient.promotorAsignadoNombre);
+      } else if (currentUser?.name) {
+        setPromotorAsignado(currentUser.name);
       }
     }
-  }, [selectedProductId]);
+  }, [selectedClient, currentUser.name, isPromotor]);
 
   // Live Amortization Schedule calculation
   const amortizationData = useMemo(() => {
-    if (!selectedProduct) return null;
+    if (!selectedProduct || !montoPrincipal || !plazoCantidad) return null;
+    const numMonto = Number(montoPrincipal);
+    const numPlazo = Number(plazoCantidad);
+    if (isNaN(numMonto) || numMonto <= 0 || isNaN(numPlazo) || numPlazo <= 0) return null;
+
     return calculateAmortizationSchedule(
-      montoPrincipal,
+      numMonto,
       selectedProduct.tasaInteresGlobal,
-      plazoCantidad,
+      numPlazo,
       selectedProduct.frecuenciaPago,
       fechaInicio
     );
@@ -79,22 +131,25 @@ function LoanFormContent() {
     }
 
     // 3. Monto del Préstamo
-    const minMonto = selectedProduct.montoMinimo || 1000;
-    const maxMonto = selectedProduct.montoMaximo || 100000;
-    if (!montoPrincipal || montoPrincipal < minMonto || montoPrincipal > maxMonto) {
-      showErrorMsg(`El monto del préstamo debe estar dentro del rango estipulado (${formatCurrency(minMonto)} - ${formatCurrency(maxMonto)}).`);
+    if (!montoPrincipal || montoPrincipal <= 0) {
+      showErrorMsg('El monto del préstamo debe ser mayor a $0 MXN.');
       return;
     }
 
     // 4. Plazo (Número de Cuotas)
     if (!plazoCantidad || plazoCantidad <= 0) {
-      showErrorMsg('Debes seleccionar un plazo de cuotas válido para este producto.');
+      showErrorMsg('Debes seleccionar un producto financiero para cargar su plazo.');
       return;
     }
 
     // 5. Fecha de Inicio / Desembolso
     if (!fechaInicio) {
       showErrorMsg('La Fecha de Desembolso es obligatoria.');
+      return;
+    }
+
+    if (fechaInicio < getTodayDateString()) {
+      showErrorMsg('La Fecha de Desembolso no puede ser anterior a la fecha actual.');
       return;
     }
 
@@ -105,13 +160,16 @@ function LoanFormContent() {
     }
 
     if (!amortizationData) {
-      showErrorMsg('No se pudo calcular la tabla de amortización con los parámetros seleccionados.');
+      showErrorMsg('Verifica los datos seleccionados para calcular la tabla de pagos.');
       return;
     }
 
+    const isPromotor = currentUser.role === 'Promotor de Campo';
+    const targetStatus = isPromotor ? 'En Evaluación' : 'Activo';
+
     setIsSubmitting(true);
     try {
-      addLoan({
+      const res = await createLoanAction({
         clienteId: selectedClient.id,
         clienteNombre: selectedClient.nombre,
         clienteTelefono: selectedClient.telefono,
@@ -125,11 +183,18 @@ function LoanFormContent() {
         cuotaRegular: amortizationData.cuotaRegular,
         totalAPagar: amortizationData.totalAPagar,
         saldoPendiente: amortizationData.totalAPagar,
-        estatus: 'Activo',
-        promotorAsignado: promotorAsignado.trim(),
+        estatus: targetStatus,
+        promotorAsignado: isPromotor ? currentUser.name : promotorAsignado.trim(),
+        creadoPorRol: currentUser.role,
         tablaAmortizacion: amortizationData.tablaAmortizacion,
       });
 
+      if (!res.success) {
+        showErrorMsg(res.message || 'Error al procesar la solicitud de préstamo.');
+        return;
+      }
+
+      await loadDataFromDB();
       router.push('/prestamos');
     } finally {
       setIsSubmitting(false);
@@ -155,22 +220,17 @@ function LoanFormContent() {
 
           {/* Client Select */}
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">Cliente Solicitante</label>
-            <select
-              required
+            <label className="block text-xs font-semibold text-slate-300 mb-1">Cliente Solicitante *</label>
+            <SearchableSelect
+              options={clientOptions}
               value={selectedClientId}
-              onChange={(e) => setSelectedClientId(e.target.value)}
-              className="w-full px-3 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500"
-            >
-              <option value="" disabled>Selecciona un cliente...</option>
-              {activeClients.map((client) => (
-                <option key={client.id} value={client.id}>
-                  {client.nombre} ({client.folio})
-                </option>
-              ))}
-            </select>
+              onChange={(val) => setSelectedClientId(val)}
+              placeholder="Selecciona o busca un cliente..."
+              searchPlaceholder="Buscar cliente por folio o nombre..."
+              initialLimit={4}
+            />
             {selectedClient && (
-              <p className="text-[11px] text-slate-400 mt-1 flex justify-between">
+              <p className="text-[11px] text-slate-400 mt-1.5 flex justify-between">
                 <span>Score: <strong className="text-emerald-400">{selectedClient.scoreCrediticio}</strong></span>
                 <span>Folio: <strong className="text-slate-300">{selectedClient.folio}</strong></span>
               </p>
@@ -179,88 +239,82 @@ function LoanFormContent() {
 
           {/* Product Select */}
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">Producto Financiero</label>
-            <select
-              required
+            <label className="block text-xs font-semibold text-slate-300 mb-1">Producto Financiero *</label>
+            <SearchableSelect
+              options={productOptions}
               value={selectedProductId}
-              onChange={(e) => setSelectedProductId(e.target.value)}
-              className="w-full px-3 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500"
-            >
-              {activeProducts.map((prod) => (
-                <option key={prod.id} value={prod.id}>
-                  {prod.nombre} (Tasa: {prod.tasaInteresGlobal}% • {prod.frecuenciaPago})
-                </option>
-              ))}
-            </select>
+              onChange={(val) => setSelectedProductId(val)}
+              placeholder="Selecciona un producto..."
+              searchPlaceholder="Buscar producto financiero..."
+              initialLimit={4}
+            />
           </div>
 
           {/* Monto Principal */}
           <div>
-            <div className="flex justify-between items-center mb-1">
-              <label className="text-xs font-semibold text-slate-300">Monto del Préstamo ($ MXN)</label>
-              {selectedProduct && (
-                <span className="text-[10px] text-slate-400">
-                  Rango: {formatCurrency(selectedProduct.montoMinimo)} - {formatCurrency(selectedProduct.montoMaximo)}
-                </span>
-              )}
-            </div>
+            <label className="block text-xs font-semibold text-slate-300 mb-1">Monto del Préstamo ($ MXN) *</label>
             <input
               type="number"
-              step="500"
+              inputMode="decimal"
               required
-              min={selectedProduct?.montoMinimo || 1000}
-              max={selectedProduct?.montoMaximo || 100000}
               value={montoPrincipal}
-              onChange={(e) => setMontoPrincipal(Number(e.target.value))}
-              className="w-full px-4 py-3 rounded-xl bg-slate-900 border border-slate-700 text-emerald-400 font-extrabold text-lg focus:outline-none focus:border-emerald-500"
+              onChange={(e) => setMontoPrincipal(e.target.value === '' ? '' : Number(e.target.value))}
+              placeholder="Ej: 10000"
+              className="w-full px-4 py-3 rounded-xl bg-slate-900 border border-slate-700 text-emerald-400 font-extrabold text-lg focus:outline-none focus:border-emerald-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
             />
           </div>
 
-          {/* Plazo / Número de Cuotas */}
+          {/* Plazo / Número de Cuotas (Informativo, no editable) */}
           <div>
             <label className="block text-xs font-semibold text-slate-300 mb-1">
-              Plazo (Número de Cuotas {selectedProduct?.frecuenciaPago})
+              Plazo del Préstamo (Configurado por Producto)
             </label>
-            <div className="flex gap-2 flex-wrap">
-              {selectedProduct?.plazosPosibles.map((plazo) => (
-                <button
-                  key={plazo}
-                  type="button"
-                  onClick={() => setPlazoCantidad(plazo)}
-                  className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all border ${
-                    plazoCantidad === plazo
-                      ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md shadow-emerald-500/20'
-                      : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-white'
-                  }`}
-                >
-                  {plazo} cuotas
-                </button>
-              ))}
-            </div>
+            <input
+              type="text"
+              disabled
+              readOnly
+              value={
+                selectedProduct
+                  ? `${selectedProduct.plazo} cuotas (${selectedProduct.frecuenciaPago})`
+                  : 'Selecciona un producto financiero'
+              }
+              className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-emerald-400 font-bold text-xs cursor-not-allowed opacity-85"
+            />
           </div>
 
           {/* Fecha de Inicio */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">Fecha Desembolso</label>
+              <label className="block text-xs font-semibold text-slate-300 mb-1">Fecha Desembolso *</label>
               <input
                 type="date"
                 required
+                min={getTodayDateString()}
                 value={fechaInicio}
                 onChange={(e) => setFechaInicio(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500 [color-scheme:dark]"
+                className="w-full px-3 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500 [color-scheme:dark]"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">Promotor Asignado</label>
-              <input
-                type="text"
-                required
-                value={promotorAsignado}
-                onChange={(e) => setPromotorAsignado(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500"
-              />
+              <label className="block text-xs font-semibold text-slate-300 mb-1">Promotor Asignado *</label>
+              {isAdmin ? (
+                <SearchableSelect
+                  options={promoterOptions}
+                  value={promotorAsignado}
+                  onChange={(val) => setPromotorAsignado(val)}
+                  placeholder="Selecciona promotor..."
+                  searchPlaceholder="Buscar promotor..."
+                  initialLimit={4}
+                />
+              ) : (
+                <input
+                  type="text"
+                  disabled
+                  value={currentUser.name || 'Promotor'}
+                  className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-400 font-bold text-xs cursor-not-allowed opacity-75"
+                />
+              )}
             </div>
           </div>
 
@@ -273,7 +327,7 @@ function LoanFormContent() {
             >
               {isSubmitting ? (
                 <>
-                  <Loader2 className="w-5 h-5 animate-spin" /> Procesando y Otorgando Préstamo...
+                  <Loader2 className="w-5 h-5 animate-spin" /> Procesando...
                 </>
               ) : (
                 <>

@@ -1544,7 +1544,7 @@ export default function UsersManagementPage() {
                 >
                   {isSubmitting ? (
                     <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Guardando colaborador...
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Guardando...
                     </>
                   ) : editingUserId ? (
                     'Guardar Cambios'

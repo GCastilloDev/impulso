@@ -3,10 +3,126 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, User, Phone, MapPin, Banknote, Plus, History, CreditCard, UserCheck, ShieldCheck, UserCog, ShieldAlert } from 'lucide-react';
+import { ArrowLeft, User, Phone, MapPin, Banknote, Plus, History, CreditCard, UserCheck, ShieldCheck, UserCog, ShieldAlert, Copy, Check, Mail } from 'lucide-react';
 import { useImpulsoStore } from '@/store/useImpulsoStore';
 import { CreditScoreBadge, LoanStatusBadge } from '@/components/shared/StatusBadges';
-import { formatCurrency, formatDate, formatDateWithTime } from '@/lib/utils';
+import { formatCurrency, formatDate, formatDateWithTime, formatPhoneNumber } from '@/lib/utils';
+
+function ContactPhoneAction({ phone }: { phone: string }) {
+  const [copied, setCopied] = useState(false);
+  const cleanDigits = phone.replace(/\D/g, '');
+  const displayPhone = formatPhoneNumber(phone);
+
+  const handleCopy = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    navigator.clipboard.writeText(cleanDigits);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="flex items-center gap-2">
+      <a
+        href={`tel:${cleanDigits}`}
+        className="font-bold text-emerald-400 hover:text-emerald-300 hover:underline transition-colors flex items-center gap-1.5"
+        title="Haz clic para marcar automáticamente"
+      >
+        <Phone className="w-3.5 h-3.5" />
+        <span>{displayPhone}</span>
+      </a>
+      <button
+        type="button"
+        onClick={handleCopy}
+        className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
+        title="Copiar número al portapapeles"
+      >
+        {copied ? (
+          <span className="flex items-center gap-1 text-[10px] text-emerald-400 font-bold bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+            <Check className="w-3 h-3" /> ¡Copiado!
+          </span>
+        ) : (
+          <Copy className="w-3.5 h-3.5" />
+        )}
+      </button>
+    </div>
+  );
+}
+
+function ContactEmailAction({ email }: { email?: string | null }) {
+  const [copied, setCopied] = useState(false);
+
+  if (!email) {
+    return <p className="text-slate-400 text-[11px] mt-0.5">Sin correo electrónico</p>;
+  }
+
+  const handleCopy = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    navigator.clipboard.writeText(email);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="flex items-center gap-2 mt-0.5">
+      <a
+        href={`mailto:${email}`}
+        className="text-slate-300 hover:text-indigo-400 hover:underline transition-colors text-[11px] flex items-center gap-1.5"
+        title="Haz clic para enviar un correo electrónico"
+      >
+        <Mail className="w-3.5 h-3.5 text-indigo-400" />
+        <span>{email}</span>
+      </a>
+      <button
+        type="button"
+        onClick={handleCopy}
+        className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
+        title="Copiar correo al portapapeles"
+      >
+        {copied ? (
+          <span className="flex items-center gap-1 text-[10px] text-emerald-400 font-bold bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+            <Check className="w-3 h-3" /> ¡Copiado!
+          </span>
+        ) : (
+          <Copy className="w-3.5 h-3.5" />
+        )}
+      </button>
+    </div>
+  );
+}
+
+function CopyableField({ text, valueToCopy, className = '' }: { text: string; valueToCopy?: string; className?: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    navigator.clipboard.writeText(valueToCopy || text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <span className={`inline-flex items-center gap-1.5 ${className}`}>
+      <span>{text}</span>
+      <button
+        type="button"
+        onClick={handleCopy}
+        className="p-0.5 rounded hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
+        title="Copiar al portapapeles"
+      >
+        {copied ? (
+          <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400 font-bold bg-emerald-500/10 px-1 py-0.2 rounded border border-emerald-500/20">
+            <Check className="w-3 h-3" /> Copiado
+          </span>
+        ) : (
+          <Copy className="w-3.5 h-3.5" />
+        )}
+      </button>
+    </span>
+  );
+}
 
 export default function ClientDetailPage() {
   const params = useParams();
@@ -82,15 +198,31 @@ export default function ClientDetailPage() {
   const ref1 = client.referencia1 || {
     nombre: 'Gonzalo Sánchez Ruiz',
     parentesco: 'Familiar',
-    telefono: '55 1122 3344',
-    direccion: 'CDMX',
+    telefono: '5511223344',
+    direccionEstructurada: {
+      calle: 'Av. Insurgentes Sur',
+      numExterior: '1458',
+      colonia: 'Actipan',
+      codigoPostal: '03920',
+      ciudad: 'Benito Juárez',
+      estado: 'CDMX',
+    },
+    direccion: 'Av. Insurgentes Sur N° Ext 1458, Actipan, Benito Juárez, CDMX, C.P. 03920',
   };
 
   const ref2 = client.referencia2 || {
     nombre: 'Lorena Fernández Vega',
     parentesco: 'Amigo',
-    telefono: '55 6677 8899',
-    direccion: 'Edo. Méx.',
+    telefono: '5566778899',
+    direccionEstructurada: {
+      calle: 'Calle 16 de Septiembre',
+      numExterior: '204',
+      colonia: 'Centro',
+      codigoPostal: '50000',
+      ciudad: 'Toluca',
+      estado: 'Edo. Méx.',
+    },
+    direccion: 'Calle 16 de Septiembre N° Ext 204, Centro, Toluca, Edo. Méx., C.P. 50000',
   };
 
   const totalDeudaActiva = clientLoans
@@ -137,9 +269,20 @@ export default function ClientDetailPage() {
             <div className="flex items-center gap-3 flex-wrap">
               <h1 className="text-2xl font-extrabold text-white tracking-tight">{client.nombre}</h1>
               <CreditScoreBadge score={client.scoreCrediticio} />
+              <span
+                className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
+                  client.estatus === 'Activo'
+                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                    : client.estatus === 'Bloqueado'
+                    ? 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                    : 'bg-slate-800 text-slate-400 border-slate-700'
+                }`}
+              >
+                {client.estatus}
+              </span>
             </div>
-            <p className="text-xs text-slate-400 font-mono mt-1 space-x-2">
-              <span>{client.folio}</span> • <span>CURP: <strong className="text-slate-200">{client.curp}</strong></span> • <span>RFC: <strong className="text-emerald-400">{clientRfc}</strong></span>
+            <p className="text-xs text-slate-400 font-mono mt-1 space-x-2 flex flex-wrap items-center gap-y-1">
+              <span>{client.folio}</span> • <span>CURP: <strong className="text-slate-200">{client.curp}</strong></span> • <span>RFC: <strong className="text-emerald-400">{clientRfc}</strong></span> • <span>Alta: <strong className="text-slate-300">{formatDate(client.fechaRegistro)}</strong></span>
             </p>
           </div>
         </div>
@@ -169,15 +312,14 @@ export default function ClientDetailPage() {
             </div>
           </div>
 
-          <button
-            type="button"
-            disabled
-            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-slate-800/80 text-slate-500 font-extrabold text-sm border border-slate-700/60 cursor-not-allowed opacity-60"
-            title="Otorgamiento de préstamo deshabilitado desde expediente"
+          <Link
+            href={`/prestamos/nuevo?clienteId=${client.id}`}
+            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-extrabold text-xs shadow-lg shadow-emerald-500/20 transition-all"
+            title="Otorgar préstamo a este cliente"
           >
             <Plus className="w-4 h-4 stroke-[3]" />
             Otorgar Préstamo
-          </button>
+          </Link>
         </div>
       </div>
 
@@ -200,108 +342,119 @@ export default function ClientDetailPage() {
 
       {/* Contact & Identifiers */}
       <div className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4">
-        <h2 className="text-lg font-extrabold text-white tracking-tight">Expediente de Contacto & Datos Fiscales</h2>
+        <h2 className="text-lg font-extrabold text-white tracking-tight">Expediente de Contacto & Identificación Oficial</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
           <div className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 flex items-center gap-3">
-            <Phone className="w-4 h-4 text-emerald-400" />
+            <Phone className="w-4 h-4 text-emerald-400 shrink-0" />
             <div>
-              <p className="text-slate-400 font-medium">Teléfono Móvil</p>
-              <p className="text-white font-bold">{client.telefono}</p>
+              <p className="text-slate-400 font-medium">Contacto Directo</p>
+              <ContactPhoneAction phone={client.telefono} />
+              <ContactEmailAction email={client.email} />
             </div>
           </div>
 
           <div className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 flex items-center gap-3">
-            <MapPin className="w-4 h-4 text-emerald-400" />
+            <MapPin className="w-4 h-4 text-emerald-400 shrink-0" />
             <div>
               <p className="text-slate-400 font-medium">Dirección de Domicilio</p>
-              <p className="text-white font-bold">{client.direccion}</p>
+              <CopyableField text={client.direccion} className="text-white font-bold" />
             </div>
           </div>
 
           <div className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 flex items-center gap-3">
-            <ShieldCheck className="w-4 h-4 text-indigo-400" />
-            <div>
-              <p className="text-slate-400 font-medium">Identificadores Fiscales</p>
-              <p className="text-white font-mono font-bold">CURP: {client.curp}</p>
-              <p className="text-emerald-400 font-mono font-bold">RFC: {clientRfc}</p>
+            <ShieldCheck className="w-4 h-4 text-indigo-400 shrink-0" />
+            <div className="space-y-0.5">
+              <p className="text-slate-400 font-medium">Documentación Oficial</p>
+              <div>
+                <span className="text-slate-400 font-mono font-bold text-[11px]">CURP: </span>
+                <CopyableField text={client.curp} className="text-white font-mono font-bold" />
+              </div>
+              <div>
+                <span className="text-slate-400 font-mono font-bold text-[11px]">RFC: </span>
+                <CopyableField text={clientRfc} className="text-emerald-400 font-mono font-bold" />
+              </div>
+              {client.folioIne && (
+                <div>
+                  <span className="text-slate-400 font-mono font-semibold text-[11px]">Clave INE: </span>
+                  <CopyableField text={client.folioIne} className="text-indigo-300 font-mono font-semibold text-[11px]" />
+                </div>
+              )}
             </div>
           </div>
         </div>
       </div>
 
-      {/* Referencias Personales / Comerciales */}
+      {/* Referencias */}
       <div className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4">
         <h2 className="text-lg font-extrabold text-white tracking-tight flex items-center gap-2">
           <UserCheck className="w-5 h-5 text-indigo-400" />
-          Referencias Comprobables de Verificación
+          Referencias
         </h2>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
           {/* Referencia 1 */}
-          <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 space-y-2">
-            <div className="flex justify-between items-start">
-              <div>
-                <span className="text-[10px] uppercase font-bold text-indigo-400 tracking-wider">
-                  Referencia 1
+          <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 flex items-start gap-3">
+            <div className="p-2.5 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 shrink-0">
+              <UserCheck className="w-4 h-4" />
+            </div>
+            <div className="space-y-1 w-full">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-slate-400 font-semibold text-[11px] uppercase tracking-wider">Referencia 1</p>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
+                  {ref1.parentesco}
                 </span>
-                <h3 className="font-extrabold text-white text-sm">{ref1.nombre}</h3>
               </div>
-              <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
-                {ref1.parentesco}
-              </span>
-            </div>
-
-            <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between">
-              <span className="text-slate-400">Teléfono:</span>
-              <a
-                href={`tel:${ref1.telefono}`}
-                className="font-bold text-emerald-400 hover:underline flex items-center gap-1"
-              >
-                <Phone className="w-3.5 h-3.5" />
-                {ref1.telefono}
-              </a>
-            </div>
-
-            {ref1.direccion && (
-              <div className="flex justify-between text-[11px]">
-                <span className="text-slate-400">Ubicación:</span>
-                <span className="text-slate-300 font-medium">{ref1.direccion}</span>
+              <p className="text-white font-extrabold text-sm">{ref1.nombre}</p>
+              <div className="pt-0.5">
+                <ContactPhoneAction phone={ref1.telefono} />
               </div>
-            )}
+              {(ref1.direccion || ref1.direccionEstructurada) && (
+                <div className="text-slate-400 text-[11px] pt-1.5 border-t border-slate-800/80 flex items-center gap-1">
+                  <MapPin className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  <CopyableField
+                    text={
+                      ref1.direccionEstructurada
+                        ? `${ref1.direccionEstructurada.calle} #${ref1.direccionEstructurada.numExterior}${ref1.direccionEstructurada.numInterior ? ` Int ${ref1.direccionEstructurada.numInterior}` : ''}, Col. ${ref1.direccionEstructurada.colonia}, C.P. ${ref1.direccionEstructurada.codigoPostal}, ${ref1.direccionEstructurada.ciudad}, ${ref1.direccionEstructurada.estado}`
+                        : ref1.direccion || ''
+                    }
+                  />
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Referencia 2 */}
-          <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 space-y-2">
-            <div className="flex justify-between items-start">
-              <div>
-                <span className="text-[10px] uppercase font-bold text-indigo-400 tracking-wider">
-                  Referencia 2
-                </span>
-                <h3 className="font-extrabold text-white text-sm">{ref2.nombre}</h3>
+          {ref2 && (
+            <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 flex items-start gap-3">
+              <div className="p-2.5 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 shrink-0">
+                <UserCheck className="w-4 h-4" />
               </div>
-              <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
-                {ref2.parentesco}
-              </span>
-            </div>
-
-            <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between">
-              <span className="text-slate-400">Teléfono:</span>
-              <a
-                href={`tel:${ref2.telefono}`}
-                className="font-bold text-emerald-400 hover:underline flex items-center gap-1"
-              >
-                <Phone className="w-3.5 h-3.5" />
-                {ref2.telefono}
-              </a>
-            </div>
-
-            {ref2.direccion && (
-              <div className="flex justify-between text-[11px]">
-                <span className="text-slate-400">Ubicación:</span>
-                <span className="text-slate-300 font-medium">{ref2.direccion}</span>
+              <div className="space-y-1 w-full">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-slate-400 font-semibold text-[11px] uppercase tracking-wider">Referencia 2</p>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
+                    {ref2.parentesco}
+                  </span>
+                </div>
+                <p className="text-white font-extrabold text-sm">{ref2.nombre}</p>
+                <div className="pt-0.5">
+                  <ContactPhoneAction phone={ref2.telefono} />
+                </div>
+                {(ref2.direccion || ref2.direccionEstructurada) && (
+                  <div className="text-slate-400 text-[11px] pt-1.5 border-t border-slate-800/80 flex items-center gap-1">
+                    <MapPin className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    <CopyableField
+                      text={
+                        ref2.direccionEstructurada
+                          ? `${ref2.direccionEstructurada.calle} #${ref2.direccionEstructurada.numExterior}${ref2.direccionEstructurada.numInterior ? ` Int ${ref2.direccionEstructurada.numInterior}` : ''}, Col. ${ref2.direccionEstructurada.colonia}, C.P. ${ref2.direccionEstructurada.codigoPostal}, ${ref2.direccionEstructurada.ciudad}, ${ref2.direccionEstructurada.estado}`
+                          : ref2.direccion || ''
+                      }
+                    />
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </div>
 

@@ -31,11 +31,7 @@ export function Navbar({ onToggleSidebar }: NavbarProps) {
         </button>
 
         <div className="flex items-center gap-2">
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-            <Database className="w-3.5 h-3.5" />
-            Storage Persistente
-          </span>
-          <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-slate-800 text-slate-300">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-slate-800 text-slate-300">
             <Calendar className="w-3.5 h-3.5 text-white" />
             {formatDate(todayStr)}
           </span>

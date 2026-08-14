@@ -157,7 +157,7 @@ export default function LoginPage() {
             >
               {isLoading ? (
                 <>
-                  <Loader2 className="w-4 h-4 animate-spin" /> Verificando credenciales...
+                  <Loader2 className="w-4 h-4 animate-spin" /> Verificando...
                 </>
               ) : (
                 <>

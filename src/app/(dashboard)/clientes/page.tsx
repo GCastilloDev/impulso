@@ -480,7 +480,7 @@ export default function ClientsPage() {
         referencia1: {
           nombre: ref1Nombre.trim(),
           parentesco: ref1Parentesco.trim(),
-          telefono: ref1Telefono.trim(),
+          telefono: onlyDigits(ref1Telefono, 10),
           direccionEstructurada: {
             calle: ref1Calle.trim(),
             numExterior: ref1NumExterior.trim(),
@@ -495,7 +495,7 @@ export default function ClientsPage() {
         referencia2: {
           nombre: ref2Nombre.trim(),
           parentesco: ref2Parentesco.trim(),
-          telefono: ref2Telefono.trim(),
+          telefono: onlyDigits(ref2Telefono, 10),
           direccionEstructurada: {
             calle: ref2Calle.trim(),
             numExterior: ref2NumExterior.trim(),
@@ -667,15 +667,15 @@ export default function ClientsPage() {
       {/* Clients Table */}
       <div className="glass-panel rounded-2xl border border-slate-800 overflow-hidden flex flex-col justify-between">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-slate-900/90 text-slate-400 font-semibold border-b border-slate-800 uppercase tracking-wider">
+          <table className="w-full text-left text-xs min-w-[950px]">
+            <thead className="bg-slate-900/90 text-slate-400 font-semibold border-b border-slate-800 uppercase tracking-wider whitespace-nowrap">
               <tr>
-                <th className="p-4">Folio & Cliente</th>
-                <th className="p-4">Identificación (CURP / RFC / INE)</th>
-                <th className="p-4">Promotor Asignado</th>
-                <th className="p-4">Score Crediticio</th>
-                <th className="p-4">Préstamos</th>
-                <th className="p-4 text-right">Acciones</th>
+                <th className="p-4 min-w-[200px]">Folio & Cliente</th>
+                <th className="p-4 min-w-[230px]">Identificación (CURP / RFC / INE)</th>
+                <th className="p-4 min-w-[170px]">Promotor Asignado</th>
+                <th className="p-4 min-w-[140px]">Score Crediticio</th>
+                <th className="p-4 min-w-[120px]">Préstamos</th>
+                <th className="p-4 text-right min-w-[190px]">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/80">

@@ -19,9 +19,12 @@ export function calculateAmortizationSchedule(
   frecuenciaPago: FrecuenciaPago,
   fechaInicio: string
 ): AmortizationCalculationResult {
-  const principal = Math.max(0, montoPrincipal);
-  const tasaPercent = Math.max(0, tasaInteresGlobal) / 100;
-  const plazos = Math.max(1, plazoCantidad);
+  const principal = isNaN(Number(montoPrincipal)) ? 0 : Math.max(0, Number(montoPrincipal));
+  const tasaRaw = isNaN(Number(tasaInteresGlobal)) ? 0 : Math.max(0, Number(tasaInteresGlobal));
+  const tasaPercent = tasaRaw / 100;
+  const plazos = isNaN(Number(plazoCantidad)) || Number(plazoCantidad) <= 0 ? 10 : Math.max(1, Math.round(Number(plazoCantidad)));
+  const frecuencia = frecuenciaPago || 'semanal';
+  const startDate = fechaInicio && fechaInicio.trim() ? fechaInicio : new Date().toISOString().split('T')[0];
 
   const totalInteres = Math.round(principal * tasaPercent * 100) / 100;
   const totalAPagar = Math.round((principal + totalInteres) * 100) / 100;
@@ -32,16 +35,11 @@ export function calculateAmortizationSchedule(
 
   const tablaAmortizacion: AmortizationInstallment[] = [];
   let saldoPendiente = totalAPagar;
-  let fechaActual = fechaInicio;
+  let fechaActual = startDate;
 
   for (let i = 1; i <= plazos; i++) {
     // Calcular siguiente fecha según frecuencia
-    if (i === 1) {
-      // Primera fecha de cobro
-      fechaActual = getNextPaymentDate(fechaInicio, frecuenciaPago);
-    } else {
-      fechaActual = getNextPaymentDate(fechaActual, frecuenciaPago);
-    }
+    fechaActual = getNextPaymentDate(fechaActual, frecuencia);
 
     // Ajuste en la última cuota para evitar desfases de centavos
     const esUltimaCuota = i === plazos;
@@ -63,12 +61,12 @@ export function calculateAmortizationSchedule(
 
   return {
     montoPrincipal: principal,
-    tasaInteresGlobal,
+    tasaInteresGlobal: tasaRaw,
     totalInteres,
     totalAPagar,
     cuotaRegular,
     plazoCantidad: plazos,
-    frecuenciaPago,
+    frecuenciaPago: frecuencia,
     tablaAmortizacion,
   };
 }
@@ -86,4 +84,24 @@ function getNextPaymentDate(currentDate: string, frecuencia: FrecuenciaPago): st
     default:
       return addDays(currentDate, 7);
   }
+}
+
+/**
+ * Calcula la penalización acumulada por mora por cada pago/cuota atrasada.
+ * Multiplica la mora unitaria por el número de cuotas en mora según la frecuencia configurada.
+ */
+export function calculateLateFeeForOverduePayments(
+  cuotasAtrasadas: number,
+  cuotaRegular: number,
+  tipoPenalizacion: 'porcentaje' | 'monto_fijo',
+  valorPenalizacion: number
+): number {
+  if (cuotasAtrasadas <= 0 || valorPenalizacion <= 0) return 0;
+
+  const moraUnitaria =
+    tipoPenalizacion === 'monto_fijo'
+      ? valorPenalizacion
+      : Math.round((cuotaRegular * (valorPenalizacion / 100)) * 100) / 100;
+
+  return Math.round((cuotasAtrasadas * moraUnitaria) * 100) / 100;
 }

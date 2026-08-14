@@ -45,7 +45,6 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       name: 'Cobranza en Campo',
       href: '/cobranza',
       icon: Smartphone,
-      badge: 'Mobile-First',
     },
     {
       name: 'Préstamos & Simulador',
@@ -64,13 +63,13 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
             href: '/usuarios',
             icon: UserCog,
           },
+          {
+            name: 'Productos Financieros',
+            href: '/productos',
+            icon: Settings,
+          },
         ]
       : []),
-    {
-      name: 'Productos Financieros',
-      href: '/productos',
-      icon: Settings,
-    },
   ];
 
   return (
@@ -97,9 +96,6 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
             <div>
               <h1 className="font-extrabold text-lg tracking-tight text-white flex items-center gap-1">
                 IMPULSO
-                <span className="text-xs px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-medium">
-                  MVP
-                </span>
               </h1>
               <p className="text-xs text-slate-400 font-medium">Gestión & Cobranza</p>
             </div>
@@ -144,11 +140,6 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                     <Icon className={`w-4 h-4 ${isActive ? 'text-emerald-400' : 'text-slate-400'}`} />
                     <span>{item.name}</span>
                   </div>
-                  {item.badge && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30">
-                      {item.badge}
-                    </span>
-                  )}
                 </Link>
               );
             })}
@@ -156,20 +147,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         </div>
 
         {/* Footer Actions */}
-        <div className="p-3 border-t border-slate-800/80 space-y-2">
-          <button
-            onClick={() => {
-              if (confirm('¿Restablecer el prototipo con datos semilla iniciales?')) {
-                resetToSeedData();
-                window.location.reload();
-              }
-            }}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-amber-400 bg-amber-500/10 border border-amber-500/20 hover:bg-amber-500/20 transition-all"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            Restablecer Datos Semilla
-          </button>
-
+        <div className="p-3 border-t border-slate-800/80">
           <button
             onClick={handleLogout}
             className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 transition-all"
