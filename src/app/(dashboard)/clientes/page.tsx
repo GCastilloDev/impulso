@@ -29,7 +29,7 @@ import { Client, ScoreCrediticio } from '@/types';
 import { getClientsAction, createClientAction, updateClientAction } from '@/app/actions/clienteActions';
 
 export default function ClientsPage() {
-  const { clients, setClients, loans, users, currentUser } = useImpulsoStore();
+  const { clients, setClients, loans, users, currentUser, loadDataFromDB } = useImpulsoStore();
 
   const isAdmin = currentUser.role === 'Administrador';
   const isPromotor = currentUser.role === 'Promotor de Campo';
@@ -50,9 +50,18 @@ export default function ClientsPage() {
     }
   };
 
+  const [isPageLoading, setIsPageLoading] = useState(true);
+
   useEffect(() => {
-    fetchClients();
-  }, []);
+    let isMounted = true;
+    setIsPageLoading(true);
+    Promise.all([fetchClients(), loadDataFromDB()]).finally(() => {
+      if (isMounted) setIsPageLoading(false);
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, [loadDataFromDB]);
 
   // Filters state
   const [searchTerm, setSearchTerm] = useState('');
@@ -572,6 +581,15 @@ export default function ClientsPage() {
     p.name.toLowerCase().includes(promotorSearchQuery.toLowerCase()) ||
     p.role.toLowerCase().includes(promotorSearchQuery.toLowerCase())
   );
+
+  if (isPageLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] p-12 space-y-4 glass-panel rounded-3xl border border-slate-800 my-8">
+        <Loader2 className="w-10 h-10 text-emerald-400 animate-spin" />
+        <p className="text-sm font-semibold text-slate-300">Consultando catálogo de clientes en tiempo real desde PostgreSQL...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

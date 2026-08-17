@@ -14,6 +14,7 @@ import {
   Calendar,
   Layers,
   Smartphone,
+  Loader2,
 } from 'lucide-react';
 import {
   AreaChart,
@@ -35,12 +36,21 @@ import { formatCurrency, formatDate, formatDateWithTime, getTodayDateString } fr
 import { LoanStatusBadge } from '@/components/shared/StatusBadges';
 
 export default function DashboardPage() {
-  const { loans, clients, payments, currentUser } = useImpulsoStore();
+  const { loans, clients, payments, currentUser, loadDataFromDB } = useImpulsoStore();
   const [mounted, setMounted] = useState(false);
+  const [isPageLoading, setIsPageLoading] = useState(true);
 
   useEffect(() => {
+    let isMounted = true;
     setMounted(true);
-  }, []);
+    setIsPageLoading(true);
+    loadDataFromDB().finally(() => {
+      if (isMounted) setIsPageLoading(false);
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, [loadDataFromDB]);
 
   const todayStr = getTodayDateString();
 
@@ -85,6 +95,15 @@ export default function DashboardPage() {
     link.download = `financiera-impulso-backup-${todayStr}.json`;
     link.click();
   };
+
+  if (isPageLoading || !mounted) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] p-12 space-y-4 glass-panel rounded-3xl border border-slate-800 my-8">
+        <Loader2 className="w-10 h-10 text-emerald-400 animate-spin" />
+        <p className="text-sm font-semibold text-slate-300">Consultando métricas en tiempo real desde PostgreSQL...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

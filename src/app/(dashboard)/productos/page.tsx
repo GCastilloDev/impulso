@@ -12,8 +12,7 @@ import { createProductAction, updateProductAction, deleteProductAction } from '@
 
 export default function ProductsPage() {
   const { products, currentUser, loadDataFromDB } = useImpulsoStore();
-  const isAdmin = currentUser.role === 'Administrador';
-
+  const [isPageLoading, setIsPageLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [deletingProduct, setDeletingProduct] = useState<FinancialProduct | null>(null);
@@ -21,12 +20,25 @@ export default function ProductsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const modalScrollRef = useRef<HTMLDivElement>(null);
 
-  const showErrorMsg = (msg: string) => {
-    setErrorMsg(msg);
-    if (modalScrollRef.current) {
-      modalScrollRef.current.scrollTop = 0;
-    }
-  };
+  // Form State
+  const [nombre, setNombre] = useState('');
+  const [descripcion, setDescripcion] = useState('');
+  const [frecuenciaPago, setFrecuenciaPago] = useState<FrecuenciaPago>('semanal');
+  const [plazo, setPlazo] = useState<number | string>('');
+  const [tasaInteresGlobal, setTasaInteresGlobal] = useState<number | string>('');
+  const [tipoPenalizacionMora, setTipoPenalizacionMora] = useState<TipoPenalizacionMora>('porcentaje');
+  const [valorPenalizacionMora, setValorPenalizacionMora] = useState<number | string>('');
+
+  useEffect(() => {
+    let isMounted = true;
+    setIsPageLoading(true);
+    loadDataFromDB().finally(() => {
+      if (isMounted) setIsPageLoading(false);
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, [loadDataFromDB]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -37,6 +49,24 @@ export default function ProductsPage() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isModalOpen]);
+
+  const isAdmin = currentUser?.role === 'Administrador';
+
+  const showErrorMsg = (msg: string) => {
+    setErrorMsg(msg);
+    if (modalScrollRef.current) {
+      modalScrollRef.current.scrollTop = 0;
+    }
+  };
+
+  if (isPageLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] p-12 space-y-4 glass-panel rounded-3xl border border-slate-800 my-8">
+        <Loader2 className="w-10 h-10 text-emerald-400 animate-spin" />
+        <p className="text-sm font-semibold text-slate-300">Consultando catálogo de productos en tiempo real desde PostgreSQL...</p>
+      </div>
+    );
+  }
 
   // Si no es Administrador, bloquear acceso
   if (!isAdmin) {
@@ -72,15 +102,6 @@ export default function ProductsPage() {
     setDeletingProduct(null);
     await loadDataFromDB();
   };
-
-  // Form State
-  const [nombre, setNombre] = useState('');
-  const [descripcion, setDescripcion] = useState('');
-  const [frecuenciaPago, setFrecuenciaPago] = useState<FrecuenciaPago>('semanal');
-  const [plazo, setPlazo] = useState<number | string>('');
-  const [tasaInteresGlobal, setTasaInteresGlobal] = useState<number | string>('');
-  const [tipoPenalizacionMora, setTipoPenalizacionMora] = useState<TipoPenalizacionMora>('porcentaje');
-  const [valorPenalizacionMora, setValorPenalizacionMora] = useState<number | string>('');
 
   const resetForm = () => {
     setErrorMsg(null);
@@ -375,10 +396,8 @@ export default function ProductsPage() {
                     onChange={(e) => setFrecuenciaPago(e.target.value as FrecuenciaPago)}
                     className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500"
                   >
-                    <option value="diario">Diario</option>
                     <option value="semanal">Semanal</option>
-                    <option value="quincenal">Quincenal</option>
-                    <option value="mensual">Mensual</option>
+                    <option value="diario">Diario</option>
                   </select>
                 </div>
 

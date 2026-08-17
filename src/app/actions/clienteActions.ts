@@ -1,5 +1,6 @@
 'use server';
 
+import { unstable_noStore as noStore } from 'next/cache';
 import { db } from '@/lib/db';
 import { Client, ScoreCrediticio, StructuredAddress, Reference } from '@/types';
 
@@ -20,6 +21,7 @@ export async function getClientsAction(params?: {
   search?: string;
   promotorId?: string;
 }) {
+  noStore();
   try {
     const whereClause: any = {};
 

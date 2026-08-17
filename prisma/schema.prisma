@@ -25,6 +25,7 @@ model User {
   direccionEstructurada Json?
   referencia1           Json?
   referencia2           Json?
+  diaCobroAsignado      String?
 
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
@@ -87,10 +88,18 @@ model Loan {
   totalAPagar       Float
   saldoPendiente    Float
   estatus           String   @default("Activo")
-  promotorAsignado  String
-  motivoRechazo     String?
-  creadoPorRol      String?
-  tablaAmortizacion Json
+  promotorAsignado          String
+  promotorAsignadoTelefono  String?
+  diaCobro                  String?
+  fechaSolicitud            DateTime?
+  solicitadoPorNombre       String?
+  solicitadoPorRol          String?
+  fechaHoraSolicitud        DateTime? @default(now())
+  aprobadoPorNombre         String?
+  fechaHoraAprobacion       DateTime?
+  motivoRechazo             String?
+  creadoPorRol              String?
+  tablaAmortizacion         Json
 
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt

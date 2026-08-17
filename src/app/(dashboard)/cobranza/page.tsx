@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { useImpulsoStore } from '@/store/useImpulsoStore';
 import { InstallmentStatusBadge } from '@/components/shared/StatusBadges';
-import { formatCurrency, formatDate, getTodayDateString } from '@/lib/utils';
+import { formatCurrency, formatDate, formatDateWithDay, getTodayDateString } from '@/lib/utils';
 import { AmortizationInstallment, Loan } from '@/types';
 import { registerPaymentAction } from '@/app/actions/paymentActions';
 
@@ -32,12 +32,31 @@ interface CollectionItem {
 
 export default function CollectionPage() {
   const { loans, clients, users, currentUser, loadDataFromDB } = useImpulsoStore();
+  const [isPageLoading, setIsPageLoading] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+    setIsPageLoading(true);
+    loadDataFromDB().finally(() => {
+      if (isMounted) setIsPageLoading(false);
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, [loadDataFromDB]);
+
   const todayStr = getTodayDateString();
 
   const isPromotorUser = currentUser.role === 'Promotor de Campo';
-  const activePromotores = users.filter(
-    (u) => u.estatus === 'Activo' && (u.role === 'Promotor de Campo' || u.role === 'Administrador')
-  );
+
+  // Catálogo estricto de promotores (obtenido directamente de los usuarios en la BD)
+  const promoterCatalog = users
+    .filter((u) => u.estatus === 'Activo')
+    .map((u) => ({
+      name: u.name,
+      role: u.role,
+      diaCobro: u.diaCobroAsignado || 'Sin día',
+    }));
 
   const [activeTab, setActiveTab] = useState<'pendientes' | 'mora' | 'pagados'>('pendientes');
   const [searchTerm, setSearchTerm] = useState('');
@@ -53,33 +72,37 @@ export default function CollectionPage() {
   const [nota, setNota] = useState('');
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
 
-  // Extract all pending and overdue collection items
+  // Extract collection items strictly for today's due date, overdue items, or today's paid items
   const collectionList: CollectionItem[] = [];
 
   loans.forEach((loan) => {
-    // Find client to get assigned promotor
     const client = clients.find((c) => c.id === loan.clienteId);
     const assignedPromotorName = client?.promotorAsignadoNombre || loan.promotorAsignado || 'Pedro Ramírez';
-    const assignedPromotorId = client?.promotorAsignadoId || '';
 
     loan.tablaAmortizacion.forEach((installment) => {
       const isOverdue =
         installment.estado === 'Mora' ||
-        (installment.estado === 'Pendiente' && installment.fechaVencimiento < todayStr);
+        installment.estado === 'Vencido' ||
+        ((installment.estado === 'Pendiente' || installment.estado === 'Parcial') && installment.fechaVencimiento < todayStr);
+
       const isToday = installment.fechaVencimiento === todayStr;
 
+      // REGLA DE COBRANZA EN CAMPO:
+      // Jamás mostrar cuotas futuras (fechaVencimiento > todayStr)
       if (
-        installment.estado === 'Pendiente' ||
-        installment.estado === 'Parcial' ||
-        installment.estado === 'Mora' ||
-        (installment.estado === 'Pagado' && installment.fechaPagoReal?.startsWith(todayStr))
+        isToday ||
+        isOverdue ||
+        (installment.estado === 'Pagado' && (installment.fechaPagoReal === todayStr || installment.fechaPago?.startsWith(todayStr)))
       ) {
         collectionList.push({
           loan: {
             ...loan,
             promotorAsignado: assignedPromotorName,
           },
-          installment,
+          installment: {
+            ...installment,
+            estado: isOverdue ? 'Vencido' : installment.estado,
+          },
           isOverdue,
           isToday,
         });
@@ -102,12 +125,15 @@ export default function CollectionPage() {
     if (!matchesPromotor) return false;
 
     if (activeTab === 'pendientes') {
-      return item.installment.estado === 'Pendiente' || item.installment.estado === 'Parcial';
+      // Pestaña Ruta de Cobro de Hoy: Cuotas del día de hoy MÁS todas las cuotas en mora pendientes
+      return (item.isToday || item.isOverdue) && item.installment.estado !== 'Pagado';
     }
     if (activeTab === 'mora') {
-      return item.isOverdue || item.installment.estado === 'Mora';
+      // Pestaña En Mora: SOLO cuotas vencidas/en mora que siguen pendientes
+      return item.isOverdue && item.installment.estado !== 'Pagado';
     }
     if (activeTab === 'pagados') {
+      // Pestaña Cobrados: Cuotas cobradas el día de hoy
       return item.installment.estado === 'Pagado';
     }
     return true;
@@ -116,8 +142,9 @@ export default function CollectionPage() {
   const openPaymentModal = (item: CollectionItem) => {
     setSelectedItem(item);
     const cuotaFaltante = item.installment.cuotaTotal - item.installment.montoPagado;
+    const recargoMora = item.installment.recargoPenalizacion || item.installment.penalizacionesMora || (item.isOverdue ? 100 : 0);
     setMontoRecibido(cuotaFaltante);
-    setPenalizacionCobrada(item.installment.penalizacionesMora || (item.isOverdue ? 150 : 0));
+    setPenalizacionCobrada(recargoMora);
     setMetodoPago('Efectivo');
     setNota('');
     setFeedbackMessage(null);
@@ -155,6 +182,7 @@ export default function CollectionPage() {
       });
 
       if (result.success) {
+        setFeedbackMessage(result.message);
         await loadDataFromDB();
         // Trigger Confetti Effect
         confetti({
@@ -163,7 +191,6 @@ export default function CollectionPage() {
           origin: { y: 0.7 },
         });
 
-        setFeedbackMessage('¡Pago registrado con éxito!');
         setTimeout(() => {
           setSelectedItem(null);
           setFeedbackMessage(null);
@@ -171,6 +198,8 @@ export default function CollectionPage() {
       } else {
         setFeedbackMessage(result.message || 'Error al registrar pago.');
       }
+    } catch (err: any) {
+      setFeedbackMessage(err.message || 'Error al procesar el pago.');
     } finally {
       setIsSubmitting(false);
     }
@@ -186,54 +215,63 @@ export default function CollectionPage() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [selectedItem, isSubmitting]);
 
+  if (isPageLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] p-12 space-y-4 glass-panel rounded-3xl border border-slate-800 my-8">
+        <Loader2 className="w-10 h-10 text-emerald-400 animate-spin" />
+        <p className="text-sm font-semibold text-slate-300">Consultando cobranza en tiempo real desde PostgreSQL...</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-5 max-w-3xl mx-auto">
-      {/* Mobile Header Banner */}
-      <div className="glass-panel p-5 rounded-2xl border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+    <div className="space-y-6 max-w-3xl mx-auto">
+      {/* Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2">
-            <Smartphone className="w-6 h-6 text-emerald-400" />
-            <h1 className="text-xl font-extrabold text-white tracking-tight">Ruta de Cobranza en Campo</h1>
-          </div>
-          <p className="text-xs text-slate-400 mt-0.5">
-            Sesión: <strong className="text-emerald-400">{currentUser.name}</strong> ({currentUser.role}) • Hoy: {formatDate(todayStr)}
+          <h1 className="text-2xl font-extrabold text-white flex items-center gap-2 tracking-tight">
+            <DollarSign className="w-7 h-7 text-emerald-400" />
+            Cobranza en Campo (Día Actual)
+          </h1>
+          <p className="text-sm text-slate-400">
+            Ruta de recaudación diaria y cuotas vencidas asignadas por promotor.
           </p>
         </div>
+      </div>
 
-        <div className="flex items-center gap-2">
-          {/* Promotor Selector */}
-          <div className="flex items-center gap-1.5 bg-slate-900/90 p-1.5 rounded-xl border border-slate-800 text-xs">
-            <UserCheck className="w-4 h-4 text-emerald-400" />
-            <select
-              value={promotorFilter}
-              onChange={(e) => setPromotorFilter(e.target.value)}
-              className="bg-transparent text-white font-bold text-xs focus:outline-none"
-            >
-              <option value="todos">Todos los Promotores</option>
-              {activePromotores.map((p) => (
-                <option key={p.id} value={p.name}>
-                  Ruta de {p.name}
-                </option>
-              ))}
-            </select>
-          </div>
+      {/* Filters Toolbar */}
+      <div className="glass-panel p-4 rounded-2xl border border-slate-800 flex flex-col md:flex-row gap-3 justify-between items-center">
+        <div className="relative w-full md:w-80">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            placeholder="Buscar por Cliente o Folio..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-9 pr-4 py-2 rounded-xl bg-slate-900/90 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500"
+          />
+        </div>
+
+        <div className="flex items-center gap-2 w-full md:w-auto">
+          <Filter className="w-4 h-4 text-slate-400" />
+          <span className="text-xs text-slate-400 font-medium">Promotor:</span>
+          <select
+            value={promotorFilter}
+            onChange={(e) => setPromotorFilter(e.target.value)}
+            className="px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500 capitalize"
+          >
+            {!isPromotorUser && <option value="todos">Todos los Promotores</option>}
+            {promoterCatalog.map((p) => (
+              <option key={p.name} value={p.name}>
+                {p.name} ({p.role}) - Cobro: {p.diaCobro}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
-      {/* Search Input */}
-      <div className="relative">
-        <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-        <input
-          type="text"
-          placeholder="Buscar cliente en ruta..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full pl-10 pr-4 py-3 rounded-2xl bg-slate-900 border border-slate-800 text-white text-xs focus:outline-none focus:border-emerald-500"
-        />
-      </div>
-
-      {/* Filter Tabs */}
-      <div className="flex gap-2 p-1 rounded-xl bg-slate-900/90 border border-slate-800 text-xs">
+      {/* Collection Tabs */}
+      <div className="flex rounded-xl bg-slate-900/80 p-1 border border-slate-800 text-xs">
         <button
           onClick={() => setActiveTab('pendientes')}
           className={`flex-1 py-2.5 rounded-lg font-bold transition-all flex items-center justify-center gap-1.5 ${
@@ -242,7 +280,7 @@ export default function CollectionPage() {
               : 'text-slate-400 hover:text-white'
           }`}
         >
-          <Clock className="w-3.5 h-3.5" /> Pendientes
+          <Clock className="w-3.5 h-3.5" /> Ruta de Hoy ({collectionList.filter(i => (i.isToday || i.isOverdue) && i.installment.estado !== 'Pagado').length})
         </button>
 
         <button
@@ -253,7 +291,7 @@ export default function CollectionPage() {
               : 'text-slate-400 hover:text-white'
           }`}
         >
-          <AlertTriangle className="w-3.5 h-3.5" /> En Mora
+          <AlertTriangle className="w-3.5 h-3.5" /> En Mora ({collectionList.filter(i => i.isOverdue && i.installment.estado !== 'Pagado').length})
         </button>
 
         <button
@@ -264,82 +302,97 @@ export default function CollectionPage() {
               : 'text-slate-400 hover:text-white'
           }`}
         >
-          <CheckCircle2 className="w-3.5 h-3.5" /> Cobrados
+          <CheckCircle2 className="w-3.5 h-3.5" /> Cobrados Hoy ({collectionList.filter(i => i.installment.estado === 'Pagado').length})
         </button>
       </div>
 
       {/* Collection Cards List */}
       <div className="space-y-3">
-        {filteredCollection.map((item, idx) => (
-          <div
-            key={`${item.loan.id}-${item.installment.numeroCuota}-${idx}`}
-            className={`glass-panel p-4 rounded-2xl border transition-all ${
-              item.isOverdue
-                ? 'border-rose-500/30 bg-rose-950/10'
-                : 'border-slate-800 hover:border-emerald-500/40'
-            }`}
-          >
-            <div className="flex justify-between items-start mb-2">
-              <div>
-                <h3 className="font-extrabold text-white text-base leading-tight">
-                  {item.loan.clienteNombre}
-                </h3>
-                <p className="text-xs text-slate-400 font-mono mt-0.5">
-                  Folio: {item.loan.folio} • Cuota #{item.installment.numeroCuota} de {item.loan.plazoCantidad}
-                </p>
-                <p className="text-[11px] text-emerald-400 font-semibold mt-0.5">
-                  Promotor Asignado: {item.loan.promotorAsignado}
-                </p>
-              </div>
+        {filteredCollection.map((item, idx) => {
+          const recargoMoraCard = item.installment.recargoPenalizacion || item.installment.penalizacionesMora || (item.isOverdue ? 100 : 0);
+          const cuotaFaltanteCard = item.installment.cuotaTotal - item.installment.montoPagado;
+          const totalACobrarCard = item.isOverdue && !item.installment.recargoPenalizacion ? cuotaFaltanteCard + recargoMoraCard : cuotaFaltanteCard;
 
-              <InstallmentStatusBadge status={item.installment.estado} />
-            </div>
-
-            {/* Installment Info */}
-            <div className="grid grid-cols-2 gap-2 my-3 p-3 rounded-xl bg-slate-900/80 border border-slate-800 text-xs">
-              <div>
-                <span className="text-slate-400 text-[11px]">Vencimiento:</span>
-                <p className={`font-bold ${item.isOverdue ? 'text-rose-400' : 'text-slate-200'}`}>
-                  {formatDate(item.installment.fechaVencimiento)}
-                </p>
-              </div>
-
-              <div>
-                <span className="text-slate-400 text-[11px]">Monto a Cobrar:</span>
-                <p className="font-black text-emerald-400 text-sm">
-                  {formatCurrency(item.installment.cuotaTotal - item.installment.montoPagado)}
-                </p>
-              </div>
-            </div>
-
-            {/* Touch Action Buttons */}
-            <div className="flex items-center gap-2 pt-1">
-              {item.loan.clienteTelefono && (
-                <a
-                  href={`tel:${item.loan.clienteTelefono}`}
-                  className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 flex items-center justify-center"
-                  title="Llamar al cliente"
-                >
-                  <Phone className="w-4 h-4 text-emerald-400" />
-                </a>
-              )}
-
-              {item.installment.estado !== 'Pagado' ? (
-                <button
-                  onClick={() => openPaymentModal(item)}
-                  className="flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs shadow-lg shadow-emerald-500/20 transition-all active:scale-95"
-                >
-                  <DollarSign className="w-4 h-4 stroke-[3]" />
-                  Registrar Cobro (${formatCurrency(item.installment.cuotaTotal - item.installment.montoPagado)})
-                </button>
-              ) : (
-                <div className="flex-1 py-2 px-3 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 text-xs font-bold text-center flex items-center justify-center gap-1.5">
-                  <Check className="w-4 h-4" /> Cobro Registrado
+          return (
+            <div
+              key={`${item.loan.id}-${item.installment.numeroCuota}-${idx}`}
+              className={`glass-panel p-4 rounded-2xl border transition-all ${
+                item.isOverdue
+                  ? 'border-rose-500/40 bg-rose-950/20 shadow-lg shadow-rose-950/20'
+                  : 'border-slate-800 hover:border-emerald-500/40'
+              }`}
+            >
+              <div className="flex justify-between items-start mb-2">
+                <div>
+                  <h3 className="font-extrabold text-white text-base leading-tight">
+                    {item.loan.clienteNombre}
+                  </h3>
+                  <p className="text-xs text-slate-400 font-mono mt-0.5">
+                    Folio: {item.loan.folio} • Cuota #{item.installment.numeroCuota} de {item.loan.plazoCantidad}
+                  </p>
+                  <p className="text-[11px] text-emerald-400 font-semibold mt-0.5">
+                    Promotor Asignado: {item.loan.promotorAsignado}
+                  </p>
                 </div>
-              )}
+
+                <InstallmentStatusBadge status={item.installment.estado} />
+              </div>
+
+              {/* Installment Info */}
+              <div className="grid grid-cols-2 gap-2 my-3 p-3 rounded-xl bg-slate-900/80 border border-slate-800 text-xs">
+                <div>
+                  <span className="text-slate-400 text-[11px]">Vencimiento:</span>
+                  <p className={`font-bold ${item.isOverdue ? 'text-rose-400' : 'text-slate-200'}`}>
+                    {formatDateWithDay(item.installment.fechaVencimiento)}
+                  </p>
+                </div>
+
+                <div>
+                  <span className="text-slate-400 text-[11px]">Monto a Cobrar:</span>
+                  <p className={`font-black text-sm ${item.isOverdue ? 'text-rose-300' : 'text-emerald-400'}`}>
+                    {formatCurrency(totalACobrarCard)}
+                  </p>
+                  {item.isOverdue && recargoMoraCard > 0 && (
+                    <span className="block text-[10px] text-rose-400 font-extrabold mt-0.5">
+                      ⚠️ Incluye +{formatCurrency(recargoMoraCard)} recargo mora
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Touch Action Buttons */}
+              <div className="flex items-center gap-2 pt-1">
+                {item.loan.clienteTelefono && (
+                  <a
+                    href={`tel:${item.loan.clienteTelefono.replace(/\s+/g, '')}`}
+                    className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 flex items-center justify-center"
+                    title={`Llamar a ${item.loan.clienteNombre}`}
+                  >
+                    <Phone className="w-4 h-4 text-emerald-400" />
+                  </a>
+                )}
+
+                {item.installment.estado !== 'Pagado' ? (
+                  <button
+                    onClick={() => openPaymentModal(item)}
+                    className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-black text-xs shadow-lg transition-all active:scale-95 ${
+                      item.isOverdue
+                        ? 'bg-rose-500 hover:bg-rose-400 text-white shadow-rose-500/20'
+                        : 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 shadow-emerald-500/20'
+                    }`}
+                  >
+                    <DollarSign className="w-4 h-4 stroke-[3]" />
+                    Registrar Cobro ({formatCurrency(totalACobrarCard)})
+                  </button>
+                ) : (
+                  <div className="flex-1 py-2 px-3 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 text-xs font-bold text-center flex items-center justify-center gap-1.5">
+                    <Check className="w-4 h-4" /> Cobro Registrado
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
 
         {filteredCollection.length === 0 && (
           <div className="p-12 text-center text-slate-500 glass-panel rounded-2xl border border-slate-800">
@@ -390,6 +443,19 @@ export default function CollectionPage() {
                     <span>Valor Cuota Regular:</span>
                     <strong className="text-white">{formatCurrency(selectedItem.installment.cuotaTotal)}</strong>
                   </div>
+                </div>
+
+                {/* Total Sugerido a Recaudar Banner */}
+                <div className="p-3.5 rounded-xl bg-slate-900 border border-emerald-500/40 flex justify-between items-center shadow-lg">
+                  <div>
+                    <span className="text-slate-200 font-extrabold text-xs block">Total a Recaudar al Cliente:</span>
+                    {selectedItem.isOverdue && (
+                      <span className="text-[10px] text-rose-400 font-bold">⚠️ Incluye penalización por mora</span>
+                    )}
+                  </div>
+                  <strong className="text-emerald-400 font-black text-xl font-mono">
+                    {formatCurrency(Number(montoRecibido) + Number(penalizacionCobrada))}
+                  </strong>
                 </div>
 
                 {/* Monto Recibido Input */}

@@ -24,7 +24,7 @@ import {
   FileText,
   User as UserIcon,
 } from 'lucide-react';
-import { User, UserRole, StructuredAddress, Reference } from '@/types';
+import { User, UserRole, StructuredAddress, Reference, DIAS_SEMANA_CATALOGO } from '@/types';
 import { useImpulsoStore } from '@/store/useImpulsoStore';
 import {
   formatDate,
@@ -79,6 +79,7 @@ export default function UsersManagementPage() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [role, setRole] = useState<UserRole>('Promotor de Campo');
+  const [diaCobroAsignado, setDiaCobroAsignado] = useState('');
   const [telefono, setTelefono] = useState('');
   const [avatar, setAvatar] = useState<string>('');
 
@@ -159,6 +160,7 @@ export default function UsersManagementPage() {
     setPassword('');
     setShowPassword(false);
     setRole('Promotor de Campo');
+    setDiaCobroAsignado('');
     setTelefono('');
     setAvatar('');
     setCurp('');
@@ -212,6 +214,7 @@ export default function UsersManagementPage() {
       ? 'Administrador'
       : 'Promotor de Campo';
     setRole(normalizedRole);
+    setDiaCobroAsignado(u.diaCobroAsignado || '');
 
     setTelefono(u.telefono || '');
     setAvatar(u.avatar || '');
@@ -407,6 +410,12 @@ export default function UsersManagementPage() {
     const phoneCheck = validatePhone(telefono, 'Teléfono Móvil');
     if (!phoneCheck.isValid) {
       showErrorMsg(phoneCheck.message || 'El teléfono móvil es inválido.');
+      return;
+    }
+
+    // 4b. Día de Cobro Asignado (Obligatorio)
+    if (!diaCobroAsignado || !diaCobroAsignado.trim()) {
+      showErrorMsg('El Día de Cobro Asignado es obligatorio. Por favor selecciona un día del catálogo.');
       return;
     }
 
@@ -651,6 +660,7 @@ export default function UsersManagementPage() {
           direccionEstructurada,
           referencia1,
           referencia2,
+          diaCobroAsignado,
           requesterRole: currentUser?.role,
         });
 
@@ -675,6 +685,7 @@ export default function UsersManagementPage() {
           direccionEstructurada,
           referencia1,
           referencia2,
+          diaCobroAsignado,
           requesterRole: currentUser?.role,
         });
 
@@ -799,6 +810,7 @@ export default function UsersManagementPage() {
                   <th className="p-4">Colaborador</th>
                   <th className="p-4">Contacto / Identificación</th>
                   <th className="p-4">Rol Asignado</th>
+                  <th className="p-4">Día de Cobro</th>
                   <th className="p-4">Estatus</th>
                   <th className="p-4">Fecha de Alta</th>
                   <th className="p-4 text-right">Acciones</th>
@@ -839,20 +851,18 @@ export default function UsersManagementPage() {
                         {user.telefono || 'Sin teléfono'}
                       </div>
 
-                      {user.role === 'Promotor de Campo' && (
-                        <div className="flex flex-wrap gap-1.5 pt-0.5">
-                          {user.curp && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-900 border border-slate-700 text-slate-300 font-mono">
-                              CURP: {user.curp}
-                            </span>
-                          )}
-                          {user.folioIne && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 font-mono">
-                              INE: {user.folioIne}
-                            </span>
-                          )}
-                        </div>
-                      )}
+                      <div className="flex flex-wrap gap-1.5 pt-0.5">
+                        {user.curp && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-900 border border-slate-700 text-slate-300 font-mono">
+                            CURP: {user.curp}
+                          </span>
+                        )}
+                        {user.folioIne && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 font-mono">
+                            INE: {user.folioIne}
+                          </span>
+                        )}
+                      </div>
                     </td>
 
                     <td className="p-4">
@@ -869,6 +879,19 @@ export default function UsersManagementPage() {
                           <UserCheck className="w-3.5 h-3.5" />
                         )}
                         {user.role}
+                      </span>
+                    </td>
+
+                    <td className="p-4">
+                      <span
+                        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl font-black text-xs border shadow-sm ${
+                          user.diaCobroAsignado
+                            ? 'bg-gradient-to-r from-emerald-500/20 to-teal-500/10 text-emerald-400 border-emerald-500/30 shadow-emerald-500/5'
+                            : 'bg-slate-900 text-slate-500 border-slate-800'
+                        }`}
+                      >
+                        <Calendar className="w-3.5 h-3.5 text-emerald-400" />
+                        {user.diaCobroAsignado || 'Sin asignar'}
                       </span>
                     </td>
 
@@ -978,20 +1001,41 @@ export default function UsersManagementPage() {
             )}
 
             <form onSubmit={handleSubmitUser} noValidate className="space-y-4 text-xs">
-              {/* Selector de Rol Limpio */}
-              <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800">
-                <label className="block text-xs font-bold text-emerald-400 uppercase tracking-wider mb-1">
-                  Rol de Colaborador *
-                </label>
-                <select
-                  value={role}
-                  disabled={isSubmitting}
-                  onChange={(e) => setRole(e.target.value as UserRole)}
-                  className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white font-extrabold text-sm focus:outline-none focus:border-emerald-500"
-                >
-                  <option value="Administrador">Administrador</option>
-                  <option value="Promotor de Campo">Promotor de Campo</option>
-                </select>
+              {/* Selector de Rol y Día de Cobro Asignado */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 rounded-xl bg-slate-900 border border-slate-800">
+                <div>
+                  <label className="block text-xs font-bold text-emerald-400 uppercase tracking-wider mb-1">
+                    Rol de Colaborador *
+                  </label>
+                  <select
+                    value={role}
+                    disabled={isSubmitting}
+                    onChange={(e) => setRole(e.target.value as UserRole)}
+                    className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white font-extrabold text-sm focus:outline-none focus:border-emerald-500"
+                  >
+                    <option value="Administrador">Administrador</option>
+                    <option value="Promotor de Campo">Promotor de Campo</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-emerald-400 uppercase tracking-wider mb-1">
+                    Día de Cobro Asignado *
+                  </label>
+                  <select
+                    value={diaCobroAsignado}
+                    disabled={isSubmitting}
+                    onChange={(e) => setDiaCobroAsignado(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white font-extrabold text-sm focus:outline-none focus:border-emerald-500"
+                  >
+                    <option value="">Seleccionar día...</option>
+                    {DIAS_SEMANA_CATALOGO.map((dia) => (
+                      <option key={dia} value={dia}>
+                        {dia}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               {/* Sección 1: Datos de Cuenta */}

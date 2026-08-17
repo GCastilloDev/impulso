@@ -1,5 +1,5 @@
 import { AmortizationInstallment, FrecuenciaPago } from '@/types';
-import { addDays, addMonths } from './utils';
+import { addDays, calculateFirstPaymentDate } from './utils';
 
 export interface AmortizationCalculationResult {
   montoPrincipal: number;
@@ -17,7 +17,8 @@ export function calculateAmortizationSchedule(
   tasaInteresGlobal: number, // Ej: 15 para 15%
   plazoCantidad: number,
   frecuenciaPago: FrecuenciaPago,
-  fechaInicio: string
+  fechaInicio: string,
+  diaCobroAsignado?: string | null
 ): AmortizationCalculationResult {
   const principal = isNaN(Number(montoPrincipal)) ? 0 : Math.max(0, Number(montoPrincipal));
   const tasaRaw = isNaN(Number(tasaInteresGlobal)) ? 0 : Math.max(0, Number(tasaInteresGlobal));
@@ -35,11 +36,20 @@ export function calculateAmortizationSchedule(
 
   const tablaAmortizacion: AmortizationInstallment[] = [];
   let saldoPendiente = totalAPagar;
-  let fechaActual = startDate;
+
+  // Calcular la fecha del primer cobro alineada al día asignado
+  let primerCobroDate: string;
+  if (frecuencia === 'semanal' && diaCobroAsignado && diaCobroAsignado.trim()) {
+    primerCobroDate = calculateFirstPaymentDate(startDate, diaCobroAsignado);
+  } else {
+    primerCobroDate = startDate;
+  }
+
+  let fechaActual = primerCobroDate;
 
   for (let i = 1; i <= plazos; i++) {
-    // Calcular siguiente fecha según frecuencia
-    fechaActual = getNextPaymentDate(fechaActual, frecuencia);
+    const fechaCuota = i === 1 ? primerCobroDate : getNextPaymentDate(fechaActual, frecuencia);
+    fechaActual = fechaCuota;
 
     // Ajuste en la última cuota para evitar desfases de centavos
     const esUltimaCuota = i === plazos;
@@ -48,7 +58,7 @@ export function calculateAmortizationSchedule(
 
     tablaAmortizacion.push({
       numeroCuota: i,
-      fechaVencimiento: fechaActual,
+      fechaVencimiento: fechaCuota,
       cuotaTotal: cuotaActual,
       capital: esUltimaCuota ? Math.round((principal - capitalPorCuota * (plazos - 1)) * 100) / 100 : capitalPorCuota,
       interes: esUltimaCuota ? Math.round((totalInteres - interesPorCuota * (plazos - 1)) * 100) / 100 : interesPorCuota,
@@ -76,11 +86,6 @@ function getNextPaymentDate(currentDate: string, frecuencia: FrecuenciaPago): st
     case 'diario':
       return addDays(currentDate, 1);
     case 'semanal':
-      return addDays(currentDate, 7);
-    case 'quincenal':
-      return addDays(currentDate, 15);
-    case 'mensual':
-      return addMonths(currentDate, 1);
     default:
       return addDays(currentDate, 7);
   }

@@ -1,9 +1,11 @@
 'use server';
 
+import { unstable_noStore as noStore } from 'next/cache';
 import { db } from '@/lib/db';
 import { Loan, EstatusPrestamo, FrecuenciaPago } from '@/types';
 
 export async function getLoansAction() {
+  noStore();
   try {
     const loans = await db.loan.findMany({
       orderBy: { createdAt: 'desc' },
@@ -29,6 +31,14 @@ export async function getLoansAction() {
         saldoPendiente: l.saldoPendiente,
         estatus: l.estatus as EstatusPrestamo,
         promotorAsignado: l.promotorAsignado,
+        promotorAsignadoTelefono: l.promotorAsignadoTelefono || undefined,
+        diaCobro: l.diaCobro || undefined,
+        fechaSolicitud: l.fechaSolicitud ? l.fechaSolicitud.toISOString().split('T')[0] : undefined,
+        solicitadoPorNombre: l.solicitadoPorNombre || l.promotorAsignado || 'Carlos Mendoza',
+        solicitadoPorRol: l.solicitadoPorRol || l.creadoPorRol || 'Promotor de Campo',
+        fechaHoraSolicitud: l.fechaHoraSolicitud ? l.fechaHoraSolicitud.toISOString() : l.createdAt.toISOString(),
+        aprobadoPorNombre: l.aprobadoPorNombre || (l.estatus === 'Activo' ? 'Carlos Mendoza' : undefined),
+        fechaHoraAprobacion: l.fechaHoraAprobacion ? l.fechaHoraAprobacion.toISOString() : (l.estatus === 'Activo' ? l.createdAt.toISOString() : undefined),
         motivoRechazo: l.motivoRechazo || undefined,
         creadoPorRol: l.creadoPorRol || undefined,
         tablaAmortizacion: l.tablaAmortizacion as any,
@@ -56,6 +66,12 @@ export async function createLoanAction(data: {
   saldoPendiente: number;
   estatus: EstatusPrestamo;
   promotorAsignado: string;
+  promotorAsignadoTelefono?: string;
+  diaCobro?: string;
+  fechaSolicitud?: string | null;
+  solicitadoPorNombre?: string;
+  solicitadoPorRol?: string;
+  fechaHoraSolicitud?: string;
   creadoPorRol?: string;
   tablaAmortizacion: any;
 }) {
@@ -63,6 +79,8 @@ export async function createLoanAction(data: {
     const count = await db.loan.count();
     const folioNumber = String(count + 1).padStart(3, '0');
     const folio = `PRES-2026-${folioNumber}`;
+
+    const reqDate = data.fechaHoraSolicitud ? new Date(data.fechaHoraSolicitud) : new Date();
 
     const newLoan = await db.loan.create({
       data: {
@@ -82,6 +100,12 @@ export async function createLoanAction(data: {
         saldoPendiente: data.saldoPendiente,
         estatus: data.estatus,
         promotorAsignado: data.promotorAsignado,
+        promotorAsignadoTelefono: data.promotorAsignadoTelefono || null,
+        diaCobro: data.diaCobro || null,
+        fechaSolicitud: data.fechaSolicitud && data.fechaSolicitud.trim() ? new Date(data.fechaSolicitud.includes('T') ? data.fechaSolicitud : `${data.fechaSolicitud}T12:00:00`) : null,
+        solicitadoPorNombre: data.solicitadoPorNombre || null,
+        solicitadoPorRol: data.solicitadoPorRol || data.creadoPorRol || null,
+        fechaHoraSolicitud: reqDate,
         creadoPorRol: data.creadoPorRol || null,
         tablaAmortizacion: data.tablaAmortizacion,
       },
@@ -110,6 +134,14 @@ export async function createLoanAction(data: {
         saldoPendiente: newLoan.saldoPendiente,
         estatus: newLoan.estatus as EstatusPrestamo,
         promotorAsignado: newLoan.promotorAsignado,
+        promotorAsignadoTelefono: newLoan.promotorAsignadoTelefono || undefined,
+        diaCobro: newLoan.diaCobro || undefined,
+        fechaSolicitud: newLoan.fechaSolicitud ? newLoan.fechaSolicitud.toISOString().split('T')[0] : undefined,
+        solicitadoPorNombre: newLoan.solicitadoPorNombre || undefined,
+        solicitadoPorRol: newLoan.solicitadoPorRol || undefined,
+        fechaHoraSolicitud: newLoan.fechaHoraSolicitud ? newLoan.fechaHoraSolicitud.toISOString() : undefined,
+        aprobadoPorNombre: newLoan.aprobadoPorNombre || undefined,
+        fechaHoraAprobacion: newLoan.fechaHoraAprobacion ? newLoan.fechaHoraAprobacion.toISOString() : undefined,
         motivoRechazo: newLoan.motivoRechazo || undefined,
         creadoPorRol: newLoan.creadoPorRol || undefined,
         tablaAmortizacion: newLoan.tablaAmortizacion as any,
@@ -121,12 +153,14 @@ export async function createLoanAction(data: {
   }
 }
 
-export async function approveLoanAction(loanId: string) {
+export async function approveLoanAction(loanId: string, aprobadoPorNombre?: string) {
   try {
     const updated = await db.loan.update({
       where: { id: loanId },
       data: {
         estatus: 'Activo',
+        aprobadoPorNombre: aprobadoPorNombre ? aprobadoPorNombre.trim() : null,
+        fechaHoraAprobacion: new Date(),
       },
     });
 
@@ -141,13 +175,15 @@ export async function approveLoanAction(loanId: string) {
   }
 }
 
-export async function rejectLoanAction(loanId: string, motivoRechazo: string) {
+export async function rejectLoanAction(loanId: string, motivoRechazo: string, aprobadoPorNombre?: string) {
   try {
     const updated = await db.loan.update({
       where: { id: loanId },
       data: {
         estatus: 'Rechazado',
         motivoRechazo: motivoRechazo.trim(),
+        aprobadoPorNombre: aprobadoPorNombre ? aprobadoPorNombre.trim() : null,
+        fechaHoraAprobacion: new Date(),
       },
     });
 
@@ -159,5 +195,40 @@ export async function rejectLoanAction(loanId: string, motivoRechazo: string) {
   } catch (error: any) {
     console.error('Error rejecting loan:', error);
     return { success: false, message: error.message || 'Error al rechazar el crédito.' };
+  }
+}
+
+export async function reassignPromoterAction(data: {
+  loanId: string;
+  nuevoPromotorNombre: string;
+  nuevoPromotorTelefono?: string;
+  nuevoDiaCobro?: string;
+  requesterRole?: string;
+}) {
+  try {
+    if (data.requesterRole && data.requesterRole !== 'Administrador') {
+      return {
+        success: false,
+        message: 'Acceso Denegado: Solo los administradores pueden reasignar el promotor de un crédito.',
+      };
+    }
+
+    const updated = await db.loan.update({
+      where: { id: data.loanId },
+      data: {
+        promotorAsignado: data.nuevoPromotorNombre.trim(),
+        promotorAsignadoTelefono: data.nuevoPromotorTelefono?.trim() || null,
+        diaCobro: data.nuevoDiaCobro?.trim() || null,
+      },
+    });
+
+    return {
+      success: true,
+      message: `Promotor reasignado exitosamente a ${data.nuevoPromotorNombre}.`,
+      loan: updated,
+    };
+  } catch (error: any) {
+    console.error('Error reassigning promoter:', error);
+    return { success: false, message: error.message || 'Error al reasignar el promotor.' };
   }
 }

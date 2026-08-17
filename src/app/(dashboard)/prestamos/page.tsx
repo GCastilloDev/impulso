@@ -2,15 +2,15 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { Banknote, Search, Plus, Calendar, Eye, AlertTriangle, ShieldCheck, Filter, CheckCircle2, XCircle, Clock, Loader2, AlertCircle } from 'lucide-react';
+import { Banknote, Search, Plus, Calendar, Eye, AlertTriangle, ShieldCheck, Filter, CheckCircle2, XCircle, Clock, Loader2, AlertCircle, UserCheck, UserCog, Phone, User as UserIcon } from 'lucide-react';
 import { useImpulsoStore } from '@/store/useImpulsoStore';
 import { LoanStatusBadge, InstallmentStatusBadge } from '@/components/shared/StatusBadges';
-import { formatCurrency, formatDate } from '@/lib/utils';
+import { formatCurrency, formatDate, formatDateWithDay, formatDateWithTime } from '@/lib/utils';
 import { Loan } from '@/types';
-import { approveLoanAction, rejectLoanAction } from '@/app/actions/loanActions';
+import { approveLoanAction, rejectLoanAction, reassignPromoterAction } from '@/app/actions/loanActions';
 
 export default function LoansPage() {
-  const { loans, currentUser, loadDataFromDB } = useImpulsoStore();
+  const { loans, users, currentUser, loadDataFromDB } = useImpulsoStore();
   const isAdmin = currentUser.role === 'Administrador';
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -21,8 +21,26 @@ export default function LoansPage() {
   const [rejectModalLoan, setRejectModalLoan] = useState<Loan | null>(null);
   const [motivoRechazoInput, setMotivoRechazoInput] = useState('');
   const [rejectError, setRejectError] = useState<string | null>(null);
+
+  // Modal para reasignación de promotor de cobro (Administrador)
+  const [reassignModalLoan, setReassignModalLoan] = useState<Loan | null>(null);
+  const [selectedNewPromoterName, setSelectedNewPromoterName] = useState('');
+  const [reassignError, setReassignError] = useState<string | null>(null);
+
   const [isProcessingAction, setIsProcessingAction] = useState(false);
+  const [isPageLoading, setIsPageLoading] = useState(true);
   const rejectModalScrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    setIsPageLoading(true);
+    loadDataFromDB().finally(() => {
+      if (isMounted) setIsPageLoading(false);
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, [loadDataFromDB]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -44,7 +62,7 @@ export default function LoansPage() {
     if (isProcessingAction) return;
     setIsProcessingAction(true);
     try {
-      await approveLoanAction(loanId);
+      await approveLoanAction(loanId, currentUser.name);
       await loadDataFromDB();
     } catch (err) {
       console.error('Error al aprobar préstamo:', err);
@@ -57,7 +75,6 @@ export default function LoansPage() {
     e.preventDefault();
     if (!rejectModalLoan || isProcessingAction) return;
 
-    // Validar motivo obligatorio (Regla de validación de formulario)
     if (!motivoRechazoInput.trim()) {
       setRejectError('Por favor ingresa el motivo del rechazo.');
       if (rejectModalScrollRef.current) rejectModalScrollRef.current.scrollTop = 0;
@@ -66,7 +83,7 @@ export default function LoansPage() {
 
     setIsProcessingAction(true);
     try {
-      await rejectLoanAction(rejectModalLoan.id, motivoRechazoInput.trim());
+      await rejectLoanAction(rejectModalLoan.id, motivoRechazoInput.trim(), currentUser.name);
       await loadDataFromDB();
 
       setRejectModalLoan(null);
@@ -74,6 +91,64 @@ export default function LoansPage() {
       setRejectError(null);
     } catch (err) {
       console.error('Error al rechazar préstamo:', err);
+    } finally {
+      setIsProcessingAction(false);
+    }
+  };
+
+  const handleConfirmReassign = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reassignModalLoan || isProcessingAction) return;
+
+    if (!isAdmin || currentUser.role !== 'Administrador') {
+      setReassignError('Acceso Denegado: Solo los usuarios administradores pueden reasignar el promotor de un crédito.');
+      return;
+    }
+
+    if (!selectedNewPromoterName) {
+      setReassignError('Debes seleccionar un colaborador para la reasignación.');
+      return;
+    }
+
+    const newPromoterObj = users.find((u) => u.name === selectedNewPromoterName);
+    if (!newPromoterObj) {
+      setReassignError('El colaborador seleccionado no es válido.');
+      return;
+    }
+
+    setIsProcessingAction(true);
+    setReassignError(null);
+
+    try {
+      const res = await reassignPromoterAction({
+        loanId: reassignModalLoan.id,
+        nuevoPromotorNombre: newPromoterObj.name,
+        nuevoPromotorTelefono: newPromoterObj.telefono,
+        nuevoDiaCobro: newPromoterObj.diaCobroAsignado,
+        requesterRole: currentUser.role,
+      });
+
+      if (!res.success) {
+        setReassignError(res.message || 'Error al reasignar el promotor.');
+        return;
+      }
+
+      await loadDataFromDB();
+      setReassignModalLoan(null);
+      setSelectedNewPromoterName('');
+
+      // Si el modal de detalle del crédito está abierto para este mismo préstamo, actualizarlo en vivo
+      if (selectedLoanModal && selectedLoanModal.id === reassignModalLoan.id) {
+        setSelectedLoanModal({
+          ...selectedLoanModal,
+          promotorAsignado: newPromoterObj.name,
+          promotorAsignadoTelefono: newPromoterObj.telefono,
+          diaCobro: newPromoterObj.diaCobroAsignado,
+        });
+      }
+    } catch (err: any) {
+      console.error('Error reassigning promoter:', err);
+      setReassignError('Error al reasignar el promotor.');
     } finally {
       setIsProcessingAction(false);
     }
@@ -89,6 +164,15 @@ export default function LoansPage() {
 
     return matchesSearch && matchesStatus;
   });
+
+  if (isPageLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] p-12 space-y-4 glass-panel rounded-3xl border border-slate-800 my-8">
+        <Loader2 className="w-10 h-10 text-emerald-400 animate-spin" />
+        <p className="text-sm font-semibold text-slate-300">Consultando préstamos en tiempo real desde PostgreSQL...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -150,13 +234,13 @@ export default function LoansPage() {
           <table className="w-full text-left text-xs min-w-[950px]">
             <thead className="bg-slate-900/90 text-slate-400 font-semibold border-b border-slate-800 uppercase tracking-wider whitespace-nowrap">
               <tr>
-                <th className="p-4 min-w-[180px]">Folio & Cliente</th>
-                <th className="p-4 min-w-[180px]">Producto / Frecuencia</th>
-                <th className="p-4 min-w-[130px]">Monto Prestado</th>
-                <th className="p-4 min-w-[140px]">Saldo Pendiente</th>
-                <th className="p-4 min-w-[120px]">Cuota Regular</th>
-                <th className="p-4 min-w-[130px]">Estatus</th>
-                <th className="p-4 text-right min-w-[210px]">Acciones & Amortización</th>
+                <th className="p-4 min-w-[170px]">Folio & Cliente</th>
+                <th className="p-4 min-w-[160px]">Producto & Montos</th>
+                <th className="p-4 min-w-[160px]">Solicitado por</th>
+                <th className="p-4 min-w-[160px]">Dictaminado por</th>
+                <th className="p-4 min-w-[180px]">Promotor</th>
+                <th className="p-4 min-w-[120px]">Estatus</th>
+                <th className="p-4 text-right min-w-[150px]">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/80">
@@ -166,6 +250,18 @@ export default function LoansPage() {
                     <div>
                       <span className="font-mono font-bold text-emerald-400">{loan.folio}</span>
                       <p className="font-bold text-white text-sm">{loan.clienteNombre}</p>
+                      {loan.clienteTelefono ? (
+                        <a
+                          href={`tel:${loan.clienteTelefono.replace(/\s+/g, '')}`}
+                          className="inline-flex items-center gap-1 text-[11px] text-emerald-400 hover:text-emerald-300 font-mono font-bold hover:underline mt-0.5"
+                          title={`Llamar a ${loan.clienteNombre}`}
+                        >
+                          <Phone className="w-3 h-3 text-emerald-400 shrink-0" />
+                          {loan.clienteTelefono}
+                        </a>
+                      ) : (
+                        <p className="text-[11px] text-slate-500 font-mono">Sin teléfono</p>
+                      )}
                     </div>
                   </td>
 
@@ -174,21 +270,78 @@ export default function LoansPage() {
                     <p className="text-[11px] text-slate-400 capitalize">
                       {loan.plazoCantidad} cuotas ({loan.frecuenciaPago})
                     </p>
+                    <p className="text-xs font-bold text-white mt-1">
+                      Monto: {formatCurrency(loan.montoPrincipal)}
+                    </p>
+                    <p className="text-[11px] font-extrabold text-emerald-400">
+                      Saldo: {formatCurrency(loan.saldoPendiente)}
+                    </p>
                   </td>
 
-                  <td className="p-4 font-semibold text-slate-300">
-                    {formatCurrency(loan.montoPrincipal)}
+                  <td className="p-4 space-y-0.5">
+                    <p className="font-bold text-white text-xs">
+                      {loan.solicitadoPorNombre || loan.promotorAsignado || 'Carlos Mendoza'}
+                    </p>
+                    <p className="text-[11px] text-slate-400">
+                      {loan.solicitadoPorRol || loan.creadoPorRol || 'Promotor de Campo'}
+                    </p>
+                    <p className="text-[10px] text-slate-500 font-mono">
+                      {loan.fechaHoraSolicitud ? formatDateWithTime(loan.fechaHoraSolicitud) : formatDate(loan.fechaInicio)}
+                    </p>
                   </td>
 
-                  <td className="p-4">
-                    <span className="font-extrabold text-emerald-400 text-sm">
-                      {formatCurrency(loan.saldoPendiente)}
-                    </span>
-                    <p className="text-[10px] text-slate-400">Total: {formatCurrency(loan.totalAPagar)}</p>
+                  <td className="p-4 space-y-0.5">
+                    {loan.estatus === 'En Evaluación' ? (
+                      <div>
+                        <span className="inline-block text-[10px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded">
+                          Pendiente evaluación
+                        </span>
+                      </div>
+                    ) : (
+                      <div>
+                        <p className="font-bold text-white text-xs">
+                          {loan.aprobadoPorNombre || 'Carlos Mendoza'}
+                        </p>
+                        <p className="text-[11px] text-slate-400">Administrador</p>
+                        <p className="text-[10px] text-slate-500 font-mono">
+                          {loan.fechaHoraAprobacion ? formatDateWithTime(loan.fechaHoraAprobacion) : formatDate(loan.fechaInicio)}
+                        </p>
+                      </div>
+                    )}
                   </td>
 
-                  <td className="p-4 font-bold text-white">
-                    {formatCurrency(loan.cuotaRegular)}
+                  <td className="p-4 space-y-1">
+                    <p className="font-extrabold text-white text-xs">{loan.promotorAsignado}</p>
+                    {loan.promotorAsignadoTelefono && (
+                      <a
+                        href={`tel:${loan.promotorAsignadoTelefono.replace(/\s+/g, '')}`}
+                        className="inline-flex items-center gap-1 text-[11px] text-slate-300 hover:text-emerald-400 font-mono font-medium hover:underline"
+                        title={`Llamar a ${loan.promotorAsignado}`}
+                      >
+                        <Phone className="w-3 h-3 text-emerald-400 shrink-0" />
+                        {loan.promotorAsignadoTelefono}
+                      </a>
+                    )}
+                    <div>
+                      <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-extrabold shadow-sm">
+                        <Calendar className="w-3 h-3 text-emerald-400 shrink-0" />
+                        Cobro: {loan.diaCobro || 'Sin asignar'}
+                      </span>
+                    </div>
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setReassignModalLoan(loan);
+                          setSelectedNewPromoterName(loan.promotorAsignado);
+                          setReassignError(null);
+                        }}
+                        className="inline-flex items-center gap-1 text-[10px] text-indigo-400 hover:text-indigo-300 font-bold underline pt-0.5"
+                      >
+                        <UserCog className="w-3 h-3" />
+                        Reasignar Promotor
+                      </button>
+                    )}
                   </td>
 
                   <td className="p-4">
@@ -301,7 +454,68 @@ export default function LoansPage() {
               </div>
             )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+            {/* Bloque de Auditoría y Promotor Asignado */}
+            <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-3 text-xs">
+              <h4 className="font-extrabold text-white uppercase tracking-wider flex items-center gap-1.5 text-xs">
+                <ShieldCheck className="w-4 h-4 text-emerald-400" /> Trazabilidad de Solicitud y Cobro
+              </h4>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="p-2.5 rounded-lg bg-slate-950/80 border border-slate-800 space-y-1">
+                  <span className="text-slate-400 block text-[11px] font-semibold">👤 Solicitado por:</span>
+                  <p className="font-bold text-white text-xs">{selectedLoanModal.solicitadoPorNombre || selectedLoanModal.promotorAsignado || 'Carlos Mendoza'}</p>
+                  <p className="text-[11px] text-slate-400">{selectedLoanModal.solicitadoPorRol || selectedLoanModal.creadoPorRol || 'Promotor de Campo'}</p>
+                  <p className="text-[10px] text-slate-500 font-mono">
+                    {selectedLoanModal.fechaHoraSolicitud ? formatDateWithTime(selectedLoanModal.fechaHoraSolicitud) : formatDate(selectedLoanModal.fechaInicio)}
+                  </p>
+                </div>
+
+                <div className="p-2.5 rounded-lg bg-slate-950/80 border border-slate-800 space-y-1">
+                  <span className="text-slate-400 block text-[11px] font-semibold">🛡️ Dictaminado por:</span>
+                  <p className="font-bold text-white text-xs">
+                    {selectedLoanModal.aprobadoPorNombre || (selectedLoanModal.estatus === 'Activo' ? 'Carlos Mendoza' : selectedLoanModal.estatus === 'En Evaluación' ? 'Pendiente evaluación' : 'Sistema')}
+                  </p>
+                  <p className="text-[11px] text-slate-400">
+                    {selectedLoanModal.estatus === 'En Evaluación' ? 'Pendiente' : 'Administrador'}
+                  </p>
+                  <p className="text-[10px] text-slate-500 font-mono">
+                    {selectedLoanModal.fechaHoraAprobacion ? formatDateWithTime(selectedLoanModal.fechaHoraAprobacion) : selectedLoanModal.estatus === 'En Evaluación' ? '-' : formatDate(selectedLoanModal.fechaInicio)}
+                  </p>
+                </div>
+
+                <div className="p-2.5 rounded-lg bg-slate-950/80 border border-slate-800 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400 block text-[11px] font-semibold">🚚 Promotor:</span>
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setReassignModalLoan(selectedLoanModal);
+                          setSelectedNewPromoterName(selectedLoanModal.promotorAsignado);
+                          setReassignError(null);
+                        }}
+                        className="text-[10px] text-indigo-400 hover:text-indigo-300 font-bold underline"
+                      >
+                        Reasignar
+                      </button>
+                    )}
+                  </div>
+                  <p className="font-extrabold text-emerald-400 text-xs">{selectedLoanModal.promotorAsignado}</p>
+                  {selectedLoanModal.promotorAsignadoTelefono && (
+                    <p className="text-[11px] text-slate-300 font-mono flex items-center gap-1">
+                      <Phone className="w-3 h-3 text-emerald-400 shrink-0" />
+                      {selectedLoanModal.promotorAsignadoTelefono}
+                    </p>
+                  )}
+                  {selectedLoanModal.diaCobro && (
+                    <span className="inline-block text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-bold">
+                      Cobro: {selectedLoanModal.diaCobro}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-xs">
               <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
                 <span className="text-slate-400">Monto Principal:</span>
                 <p className="font-bold text-white">{formatCurrency(selectedLoanModal.montoPrincipal)}</p>
@@ -314,6 +528,16 @@ export default function LoansPage() {
                 <span className="text-slate-400">Saldo Pendiente:</span>
                 <p className="font-bold text-emerald-400">{formatCurrency(selectedLoanModal.saldoPendiente)}</p>
               </div>
+              <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
+                <span className="text-slate-400">Día de Cobro:</span>
+                <p className="font-bold text-emerald-400">{selectedLoanModal.diaCobro || 'No asignado'}</p>
+              </div>
+              <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
+                <span className="text-slate-400">Fecha Solicitud:</span>
+                <p className="font-bold text-slate-300">
+                  {selectedLoanModal.fechaSolicitud ? formatDate(selectedLoanModal.fechaSolicitud) : 'No especificada'}
+                </p>
+              </div>
             </div>
 
             <h3 className="text-sm font-bold text-slate-200">Tabla de Amortización Completa</h3>
@@ -323,24 +547,48 @@ export default function LoansPage() {
                 <thead className="bg-slate-900 text-slate-400 font-semibold border-b border-slate-800">
                   <tr>
                     <th className="p-2">Cuota</th>
-                    <th className="p-2">Vencimiento</th>
+                    <th className="p-2">Día y Vencimiento</th>
                     <th className="p-2">Cuota Total</th>
                     <th className="p-2">Monto Pagado</th>
                     <th className="p-2">Estado</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60 font-mono">
-                  {selectedLoanModal.tablaAmortizacion.map((c) => (
-                    <tr key={c.numeroCuota} className="hover:bg-slate-800/40">
-                      <td className="p-2 font-bold text-slate-300">#{c.numeroCuota}</td>
-                      <td className="p-2 text-slate-300 font-sans">{formatDate(c.fechaVencimiento)}</td>
-                      <td className="p-2 text-white font-bold">{formatCurrency(c.cuotaTotal)}</td>
-                      <td className="p-2 text-emerald-400">{formatCurrency(c.montoPagado)}</td>
-                      <td className="p-2">
-                        <InstallmentStatusBadge status={c.estado} />
-                      </td>
-                    </tr>
-                  ))}
+                  {selectedLoanModal.tablaAmortizacion.map((c) => {
+                    const isMora = c.estado === 'Mora' || c.estado === 'Vencido';
+                    const isPagado = c.estado === 'Pagado';
+                    return (
+                      <tr
+                        key={c.numeroCuota}
+                        className={
+                          isMora
+                            ? 'bg-rose-500/15 border-l-4 border-l-rose-500 hover:bg-rose-500/25 transition-all text-rose-200 font-semibold'
+                            : isPagado
+                            ? 'bg-emerald-500/5 hover:bg-slate-800/40 text-slate-300'
+                            : 'hover:bg-slate-800/40 text-slate-300'
+                        }
+                      >
+                        <td className="p-2.5 font-bold">#{c.numeroCuota}</td>
+                        <td className="p-2.5 font-sans font-medium">{formatDateWithDay(c.fechaVencimiento)}</td>
+                        <td className="p-2.5 font-bold">
+                          <div>
+                            <span className={isMora ? 'text-rose-300 font-extrabold' : 'text-white'}>
+                              {formatCurrency(c.cuotaTotal)}
+                            </span>
+                            {c.recargoPenalizacion && c.recargoPenalizacion > 0 ? (
+                              <span className="block text-[10px] text-rose-400 font-bold font-sans">
+                                ⚠️ +{formatCurrency(c.recargoPenalizacion)} recargo mora
+                              </span>
+                            ) : null}
+                          </div>
+                        </td>
+                        <td className="p-2.5 text-emerald-400 font-bold">{formatCurrency(c.montoPagado)}</td>
+                        <td className="p-2.5">
+                          <InstallmentStatusBadge status={c.estado} />
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -427,6 +675,122 @@ export default function LoansPage() {
                   ) : (
                     <>
                       <XCircle className="w-3.5 h-3.5" /> Confirmar Rechazo
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal para Reasignar Promotor (Administrador) */}
+      {reassignModalLoan && (
+        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="glass-panel w-full max-w-md p-6 rounded-2xl border border-slate-800 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center pb-2 border-b border-slate-800">
+              <h2 className="text-lg font-extrabold text-white flex items-center gap-2">
+                <UserCog className="w-5 h-5 text-indigo-400" />
+                Reasignar Promotor de Cobro
+              </h2>
+              <button
+                type="button"
+                disabled={isProcessingAction}
+                onClick={() => {
+                  setReassignModalLoan(null);
+                  setSelectedNewPromoterName('');
+                  setReassignError(null);
+                }}
+                className="text-slate-400 hover:text-white p-1 text-base disabled:opacity-50"
+                title="Cerrar modal (Esc)"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-xs space-y-1">
+              <p className="text-slate-400">Préstamo Folio: <strong className="text-emerald-400 font-mono">{reassignModalLoan.folio}</strong></p>
+              <p className="text-white font-bold">{reassignModalLoan.clienteNombre}</p>
+              <p className="text-slate-400">Promotor Actual: <strong className="text-slate-200">{reassignModalLoan.promotorAsignado}</strong> (Día: {reassignModalLoan.diaCobro || 'Sin día'})</p>
+            </div>
+
+            {/* Banner de Error */}
+            {reassignError && (
+              <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/40 text-rose-300 text-xs font-semibold flex items-center gap-2.5 shadow-lg shadow-rose-500/10">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                <span>{reassignError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleConfirmReassign} noValidate className="space-y-4 text-xs">
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">
+                  Nuevo Promotor Asignado *
+                </label>
+                <select
+                  required
+                  disabled={isProcessingAction}
+                  value={selectedNewPromoterName}
+                  onChange={(e) => setSelectedNewPromoterName(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold text-xs focus:outline-none focus:border-indigo-500 disabled:opacity-50"
+                >
+                  <option value="">Selecciona un colaborador...</option>
+                  {users
+                    .filter((u) => u.estatus === 'Activo')
+                    .map((u) => (
+                      <option key={u.id} value={u.name}>
+                        {u.name} ({u.role}) - Cobro: {u.diaCobroAsignado || 'Sin día'}
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              {/* Vista previa del promotor seleccionado */}
+              {selectedNewPromoterName && (
+                <div className="p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-xs space-y-1 text-indigo-300">
+                  {(() => {
+                    const sel = users.find((u) => u.name === selectedNewPromoterName);
+                    if (!sel) return null;
+                    return (
+                      <>
+                        <p className="font-bold text-white">Detalles del Nuevo Promotor:</p>
+                        <p>👤 Nombre: {sel.name}</p>
+                        <p>📞 Teléfono: {sel.telefono || 'Sin teléfono'}</p>
+                        <p>🗓️ Día de Cobro Asignado: <strong>{sel.diaCobroAsignado || 'Sin asignar'}</strong></p>
+                        <p className="text-[10px] text-slate-400 pt-1">
+                          Nota: Al reasignar, el día de cobro del crédito se actualizará a <strong>{sel.diaCobroAsignado || 'Sin asignar'}</strong>.
+                        </p>
+                      </>
+                    );
+                  })()}
+                </div>
+              )}
+
+              <div className="flex justify-end gap-3 pt-2 border-t border-slate-800">
+                <button
+                  type="button"
+                  disabled={isProcessingAction}
+                  onClick={() => {
+                    setReassignModalLoan(null);
+                    setSelectedNewPromoterName('');
+                    setReassignError(null);
+                  }}
+                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-semibold text-xs disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isProcessingAction}
+                  className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-xs shadow-lg shadow-indigo-500/20 flex items-center gap-2 disabled:opacity-50"
+                >
+                  {isProcessingAction ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Guardando...
+                    </>
+                  ) : (
+                    <>
+                      <UserCheck className="w-3.5 h-3.5" /> Confirmar Reasignación
                     </>
                   )}
                 </button>

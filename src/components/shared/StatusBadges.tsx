@@ -66,30 +66,35 @@ export function InstallmentStatusBadge({ status }: { status: EstadoCuota }) {
   switch (status) {
     case 'Pagado':
       return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-          <CheckCircle2 className="w-3 h-3" /> Pagado
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+          <CheckCircle2 className="w-3 h-3 text-emerald-400" /> Pagado
         </span>
       );
     case 'Mora':
+    case 'Vencido':
       return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-rose-500/20 text-rose-300 border border-rose-500/30">
-          <AlertTriangle className="w-3 h-3" /> En Mora
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-extrabold bg-rose-500/30 text-rose-300 border border-rose-500/50 shadow-sm animate-pulse">
+          <AlertTriangle className="w-3 h-3 text-rose-400" /> En Mora
         </span>
       );
     case 'Parcial':
       return (
         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-amber-500/20 text-amber-300 border border-amber-500/30">
-          <Clock className="w-3 h-3" /> Parcial
+          <Clock className="w-3 h-3 text-amber-400" /> Parcial
         </span>
       );
     case 'Pendiente':
       return (
         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-slate-700/50 text-slate-300 border border-slate-600/40">
-          <Clock className="w-3 h-3" /> Pendiente
+          <Clock className="w-3 h-3 text-slate-400" /> Pendiente
         </span>
       );
     default:
-      return null;
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-slate-800 text-slate-300">
+          {status}
+        </span>
+      );
   }
 }
 

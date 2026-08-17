@@ -24,6 +24,23 @@ export function formatDate(dateString: string): string {
   }).format(date);
 }
 
+export function formatDateWithDay(dateString: string): string {
+  if (!dateString) return '';
+  const date = new Date(dateString.includes('T') ? dateString : `${dateString}T12:00:00`);
+  if (isNaN(date.getTime())) return dateString;
+
+  const weekdayStr = new Intl.DateTimeFormat('es-MX', { weekday: 'short' }).format(date);
+  const cleanWeekday = weekdayStr.replace('.', '').charAt(0).toUpperCase() + weekdayStr.replace('.', '').slice(1);
+
+  const dateStr = new Intl.DateTimeFormat('es-MX', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  }).format(date);
+
+  return `${cleanWeekday}, ${dateStr}`;
+}
+
 export function formatDateWithTime(dateString: string): string {
   if (!dateString) return '';
   const date = new Date(dateString);
@@ -60,6 +77,41 @@ export function addMonths(dateString: string, months: number): string {
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+}
+
+const DAY_INDEX_MAP: Record<string, number> = {
+  domingo: 0,
+  lunes: 1,
+  martes: 2,
+  miercoles: 3,
+  miércoles: 3,
+  jueves: 4,
+  viernes: 5,
+  sabado: 6,
+  sábado: 6,
+};
+
+/**
+ * Calcula la primera fecha de cobro coincidente con el día asignado igual o posterior a la fecha de desembolso.
+ * Si desembolso es Lunes y día asignado es Lunes -> retorna ese mismo Lunes (+0 días).
+ */
+export function calculateFirstPaymentDate(fechaDesembolso: string, diaCobroAsignado?: string | null): string {
+  if (!fechaDesembolso) return getTodayDateString();
+  if (!diaCobroAsignado || !diaCobroAsignado.trim()) return fechaDesembolso;
+
+  const date = new Date(fechaDesembolso.includes('T') ? fechaDesembolso : `${fechaDesembolso}T12:00:00`);
+  const currentDayIndex = date.getDay();
+  const normalizedTargetDay = diaCobroAsignado.trim().toLowerCase();
+  const targetDayIndex = DAY_INDEX_MAP[normalizedTargetDay];
+
+  if (targetDayIndex === undefined) return fechaDesembolso;
+
+  let daysToAdd = targetDayIndex - currentDayIndex;
+  if (daysToAdd < 0) {
+    daysToAdd += 7;
+  }
+
+  return addDays(fechaDesembolso, daysToAdd);
 }
 
 /**

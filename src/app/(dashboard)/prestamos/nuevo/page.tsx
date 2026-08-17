@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { Banknote, ArrowLeft, Calculator, Calendar, CheckCircle2, User, Percent, Loader2, AlertCircle } from 'lucide-react';
 import { useImpulsoStore } from '@/store/useImpulsoStore';
 import { calculateAmortizationSchedule } from '@/lib/financialCalculators';
-import { formatCurrency, formatDate, getTodayDateString } from '@/lib/utils';
+import { formatCurrency, formatDate, formatDateWithDay, getTodayDateString } from '@/lib/utils';
 import { createLoanAction } from '@/app/actions/loanActions';
 import { SearchableSelect } from '@/components/shared/SearchableSelect';
 
@@ -58,6 +58,7 @@ function LoanFormContent() {
   const [selectedProductId, setSelectedProductId] = useState('');
   const [montoPrincipal, setMontoPrincipal] = useState<number | ''>('');
   const [plazoCantidad, setPlazoCantidad] = useState<number | ''>('');
+  const [fechaSolicitud, setFechaSolicitud] = useState<string>('');
   const [fechaInicio, setFechaInicio] = useState<string>(getTodayDateString());
   const [promotorAsignado, setPromotorAsignado] = useState(
     currentUser.name || ''
@@ -65,6 +66,13 @@ function LoanFormContent() {
 
   const selectedClient = activeClients.find((c) => c.id === selectedClientId);
   const selectedProduct = activeProducts.find((p) => p.id === selectedProductId);
+
+  // Obtain selected promoter/user to derive assigned day of collection
+  const selectedPromoterUser = useMemo(() => {
+    return users.find((u) => u.name === promotorAsignado);
+  }, [users, promotorAsignado]);
+
+  const assignedDiaCobro = selectedPromoterUser?.diaCobroAsignado;
 
   // Auto-set default plazo when product changes
   useEffect(() => {
@@ -99,9 +107,10 @@ function LoanFormContent() {
       selectedProduct.tasaInteresGlobal,
       numPlazo,
       selectedProduct.frecuenciaPago,
-      fechaInicio
+      fechaInicio,
+      assignedDiaCobro
     );
-  }, [montoPrincipal, selectedProduct, plazoCantidad, fechaInicio]);
+  }, [montoPrincipal, selectedProduct, plazoCantidad, fechaInicio, assignedDiaCobro]);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -185,6 +194,12 @@ function LoanFormContent() {
         saldoPendiente: amortizationData.totalAPagar,
         estatus: targetStatus,
         promotorAsignado: isPromotor ? currentUser.name : promotorAsignado.trim(),
+        promotorAsignadoTelefono: selectedPromoterUser?.telefono || currentUser?.telefono || undefined,
+        diaCobro: assignedDiaCobro || undefined,
+        fechaSolicitud: fechaSolicitud && fechaSolicitud.trim() ? fechaSolicitud.trim() : null,
+        solicitadoPorNombre: currentUser.name || 'Colaborador',
+        solicitadoPorRol: currentUser.role,
+        fechaHoraSolicitud: new Date().toISOString(),
         creadoPorRol: currentUser.role,
         tablaAmortizacion: amortizationData.tablaAmortizacion,
       });
@@ -282,39 +297,65 @@ function LoanFormContent() {
             />
           </div>
 
-          {/* Fecha de Inicio */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">Fecha Desembolso *</label>
-              <input
-                type="date"
-                required
-                min={getTodayDateString()}
-                value={fechaInicio}
-                onChange={(e) => setFechaInicio(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500 [color-scheme:dark]"
-              />
+          {/* Fechas y Promotor */}
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Fecha Solicitud <span className="text-slate-500 font-normal">(Opcional)</span>
+                </label>
+                <input
+                  type="date"
+                  value={fechaSolicitud}
+                  onChange={(e) => setFechaSolicitud(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500 [color-scheme:dark]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">Fecha Desembolso *</label>
+                <input
+                  type="date"
+                  required
+                  min={getTodayDateString()}
+                  value={fechaInicio}
+                  onChange={(e) => setFechaInicio(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500 [color-scheme:dark]"
+                />
+              </div>
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">Promotor Asignado *</label>
-              {isAdmin ? (
-                <SearchableSelect
-                  options={promoterOptions}
-                  value={promotorAsignado}
-                  onChange={(val) => setPromotorAsignado(val)}
-                  placeholder="Selecciona promotor..."
-                  searchPlaceholder="Buscar promotor..."
-                  initialLimit={4}
-                />
-              ) : (
-                <input
-                  type="text"
-                  disabled
-                  value={currentUser.name || 'Promotor'}
-                  className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-400 font-bold text-xs cursor-not-allowed opacity-75"
-                />
-              )}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">Promotor Asignado *</label>
+                {isAdmin ? (
+                  <SearchableSelect
+                    options={promoterOptions}
+                    value={promotorAsignado}
+                    onChange={(val) => setPromotorAsignado(val)}
+                    placeholder="Selecciona promotor..."
+                    searchPlaceholder="Buscar promotor..."
+                    initialLimit={4}
+                  />
+                ) : (
+                  <input
+                    type="text"
+                    disabled
+                    value={currentUser.name || 'Promotor'}
+                    className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-400 font-bold text-xs cursor-not-allowed opacity-75"
+                  />
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">Día de Cobro Asignado</label>
+                <div className="px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between">
+                  <span className="text-slate-400 text-xs">Día:</span>
+                  <span className={`px-2 py-0.5 rounded text-xs font-extrabold ${assignedDiaCobro ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-rose-500/10 text-rose-400 border border-rose-500/30'}`}>
+                    {assignedDiaCobro || 'Sin día'}
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -377,7 +418,7 @@ function LoanFormContent() {
               <thead className="bg-slate-900/90 text-slate-400 font-semibold border-b border-slate-800 sticky top-0 uppercase tracking-wider">
                 <tr>
                   <th className="p-2.5">#</th>
-                  <th className="p-2.5">Fecha Vencimiento</th>
+                  <th className="p-2.5">Día y Vencimiento</th>
                   <th className="p-2.5">Capital</th>
                   <th className="p-2.5">Interés</th>
                   <th className="p-2.5">Cuota Total</th>
@@ -388,7 +429,7 @@ function LoanFormContent() {
                 {amortizationData?.tablaAmortizacion.map((cuota) => (
                   <tr key={cuota.numeroCuota} className="hover:bg-slate-800/40">
                     <td className="p-2.5 font-bold text-slate-300">#{cuota.numeroCuota}</td>
-                    <td className="p-2.5 text-slate-300 font-sans">{formatDate(cuota.fechaVencimiento)}</td>
+                    <td className="p-2.5 text-slate-300 font-sans">{formatDateWithDay(cuota.fechaVencimiento)}</td>
                     <td className="p-2.5 text-slate-400">{formatCurrency(cuota.capital)}</td>
                     <td className="p-2.5 text-indigo-300">{formatCurrency(cuota.interes)}</td>
                     <td className="p-2.5 font-bold text-emerald-400">{formatCurrency(cuota.cuotaTotal)}</td>

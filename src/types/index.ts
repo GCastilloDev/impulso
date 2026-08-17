@@ -35,9 +35,13 @@ export interface User {
   direccionEstructurada?: StructuredAddress;
   referencia1?: Reference;
   referencia2?: Reference;
+  diaCobroAsignado?: string;
 }
 
-export type FrecuenciaPago = 'diario' | 'semanal' | 'quincenal' | 'mensual';
+export type FrecuenciaPago = 'diario' | 'semanal';
+
+export const DIAS_SEMANA_CATALOGO = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'] as const;
+export type DiaSemana = typeof DIAS_SEMANA_CATALOGO[number];
 
 export type TipoPenalizacionMora = 'porcentaje' | 'monto_fijo';
 
@@ -76,7 +80,7 @@ export interface Client {
   fechaRegistro: string;
 }
 
-export type EstadoCuota = 'Pendiente' | 'Pagado' | 'Mora' | 'Parcial';
+export type EstadoCuota = 'Pendiente' | 'Pagado' | 'Mora' | 'Parcial' | 'Vencido';
 
 export interface AmortizationInstallment {
   numeroCuota: number;
@@ -90,6 +94,7 @@ export interface AmortizationInstallment {
   fechaPago?: string;
   fechaPagoReal?: string;
   penalizacionesMora?: number;
+  recargoPenalizacion?: number;
 }
 
 export type EstatusPrestamo = 'En Evaluación' | 'Aprobado' | 'Rechazado' | 'Activo' | 'Pagado' | 'En Mora' | 'Cancelado' | 'Liquidado' | 'Incobrable';
@@ -112,6 +117,14 @@ export interface Loan {
   saldoPendiente: number;
   estatus: EstatusPrestamo;
   promotorAsignado: string;
+  promotorAsignadoTelefono?: string;
+  diaCobro?: string;
+  fechaSolicitud?: string | null;
+  solicitadoPorNombre?: string;
+  solicitadoPorRol?: string;
+  fechaHoraSolicitud?: string;
+  aprobadoPorNombre?: string;
+  fechaHoraAprobacion?: string;
   motivoRechazo?: string;
   creadoPorRol?: UserRole;
   tablaAmortizacion: AmortizationInstallment[];

@@ -1,5 +1,6 @@
 'use server';
 
+import { unstable_noStore as noStore } from 'next/cache';
 import { getClientsAction } from './clienteActions';
 import { getLoansAction } from './loanActions';
 import { getUsersAction } from './userActions';
@@ -7,6 +8,7 @@ import { getProductsAction } from './productActions';
 import { getPaymentsAction } from './paymentActions';
 
 export async function fetchAllDatabaseDataAction() {
+  noStore();
   try {
     const [clientsRes, loansRes, usersRes, productsRes, paymentsRes] = await Promise.all([
       getClientsAction(),

@@ -1,9 +1,11 @@
 'use server';
 
+import { unstable_noStore as noStore } from 'next/cache';
 import { db } from '@/lib/db';
 import { PaymentRecord } from '@/types';
 
 export async function getPaymentsAction() {
+  noStore();
   try {
     const payments = await db.paymentRecord.findMany({
       orderBy: { createdAt: 'desc' },

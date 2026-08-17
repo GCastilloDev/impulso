@@ -1,9 +1,11 @@
 'use server';
 
+import { unstable_noStore as noStore } from 'next/cache';
 import { db } from '@/lib/db';
 import { FinancialProduct } from '@/types';
 
 export async function getProductsAction() {
+  noStore();
   try {
     const products = await db.financialProduct.findMany({
       where: { eliminado: false },

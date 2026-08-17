@@ -67,59 +67,6 @@ export const MOCK_USERS: User[] = [
       direccion: 'Av. Lerdo de Tejada N° Ext 78 Int 3, Col. Merced, Toluca, Estado de México, C.P. 50080',
     },
   },
-  {
-    id: 'usr-3',
-    name: 'Laura Méndez',
-    email: 'laura.mendez@financieraimpulso.com',
-    password: '123456',
-    role: 'Promotor de Campo',
-    telefono: '5566778899',
-    estatus: 'Activo',
-    fechaAlta: '2026-01-10',
-    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=200',
-    curp: 'MELA921105MDFRRN04',
-    fechaNacimiento: '1992-11-05',
-    folioIne: 'IDMEX1992110508',
-    direccionEstructurada: {
-      calle: 'Paseo Tollocan',
-      numExterior: '1205',
-      numInterior: 'B-12',
-      colonia: 'Col. Vértice',
-      codigoPostal: '50150',
-      ciudad: 'Toluca',
-      estado: 'Estado de México',
-    },
-    referencia1: {
-      nombre: 'Mariana Méndez Solares',
-      parentesco: 'Familiar',
-      telefono: '5533445566',
-      direccionEstructurada: {
-        calle: 'Calle Independencia',
-        numExterior: '304',
-        numInterior: '',
-        colonia: 'Col. Santa Clara',
-        codigoPostal: '50090',
-        ciudad: 'Toluca',
-        estado: 'Estado de México',
-      },
-      direccion: 'Calle Independencia N° Ext 304, Col. Santa Clara, Toluca, Estado de México, C.P. 50090',
-    },
-    referencia2: {
-      nombre: 'Alejandro Domínguez',
-      parentesco: 'Vecino',
-      telefono: '5544556677',
-      direccionEstructurada: {
-        calle: 'Av. Primero de Mayo',
-        numExterior: '512',
-        numInterior: '',
-        colonia: 'Col. Izcalli',
-        codigoPostal: '50140',
-        ciudad: 'Metepec',
-        estado: 'Estado de México',
-      },
-      direccion: 'Av. Primero de Mayo N° Ext 512, Col. Izcalli, Metepec, Estado de México, C.P. 50140',
-    },
-  },
 ];
 
 export const INITIAL_USER: User = MOCK_USERS[0];
@@ -138,9 +85,9 @@ export const MOCK_PRODUCTS: FinancialProduct[] = [
   },
   {
     id: 'prod-2',
-    nombre: 'Crédito Quincenal Asalariados',
-    descripcion: 'Alineado al pago de nómina quincenal con tasa preferencial.',
-    frecuenciaPago: 'quincenal',
+    nombre: 'Crédito Semanal Asalariados',
+    descripcion: 'Alineado al pago semanal con tasa preferencial.',
+    frecuenciaPago: 'semanal',
     plazo: 12,
     tasaInteresGlobal: 15.0,
     tipoPenalizacionMora: 'porcentaje',
@@ -202,7 +149,7 @@ const loan1: Loan = {
 };
 
 // Préstamo 2: Roberto (En Mora)
-const calc2 = calculateAmortizationSchedule(15000, 15.0, 8, 'quincenal', pastDate2);
+const calc2 = calculateAmortizationSchedule(15000, 15.0, 8, 'semanal', pastDate2);
 calc2.tablaAmortizacion[0].estado = 'Pagado';
 calc2.tablaAmortizacion[0].montoPagado = calc2.tablaAmortizacion[0].cuotaTotal;
 
@@ -217,11 +164,11 @@ const loan2: Loan = {
   clienteNombre: 'Roberto Alejandro Gómez Silva',
   clienteTelefono: '55 8765 4321',
   productoId: 'prod-2',
-  productoNombre: 'Crédito Quincenal Asalariados',
+  productoNombre: 'Crédito Semanal Asalariados',
   montoPrincipal: 15000,
   tasaInteresGlobal: 15.0,
   plazoCantidad: 8,
-  frecuenciaPago: 'quincenal',
+  frecuenciaPago: 'semanal',
   fechaInicio: pastDate2,
   cuotaRegular: calc2.cuotaRegular,
   totalAPagar: calc2.totalAPagar,
@@ -258,7 +205,7 @@ const loan3: Loan = {
   totalAPagar: calc3.totalAPagar,
   saldoPendiente: calc3.totalAPagar - calc3.cuotaRegular * 3,
   estatus: 'Activo',
-  promotorAsignado: 'Laura Méndez',
+  promotorAsignado: 'Pedro Ramírez',
   tablaAmortizacion: calc3.tablaAmortizacion,
 };
 

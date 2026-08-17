@@ -1,5 +1,6 @@
 'use server';
 
+import { unstable_noStore as noStore } from 'next/cache';
 import { db } from '@/lib/db';
 import bcrypt from 'bcryptjs';
 import { UserRole, StructuredAddress, Reference } from '@/types';
@@ -22,6 +23,7 @@ export async function getUsersAction(params?: {
   role?: string;
   requesterRole?: UserRole;
 }) {
+  noStore();
   try {
     const whereClause: any = {};
 
@@ -58,10 +60,10 @@ export async function getUsersAction(params?: {
         avatar: u.avatar || undefined,
         curp: u.curp || undefined,
         fechaNacimiento: u.fechaNacimiento || undefined,
-        folioIne: u.folioIne || undefined,
         direccionEstructurada: safeParseJson<StructuredAddress>(u.direccionEstructurada),
         referencia1: safeParseJson<Reference>(u.referencia1),
         referencia2: safeParseJson<Reference>(u.referencia2),
+        diaCobroAsignado: u.diaCobroAsignado || undefined,
       })),
     };
   } catch (error: any) {
@@ -122,6 +124,7 @@ export async function createUserAction(data: {
   direccionEstructurada?: StructuredAddress;
   referencia1?: Reference;
   referencia2?: Reference;
+  diaCobroAsignado?: string;
   requesterRole?: UserRole;
 }) {
   try {
@@ -169,6 +172,7 @@ export async function createUserAction(data: {
         direccionEstructurada: data.direccionEstructurada ? (data.direccionEstructurada as any) : null,
         referencia1: data.referencia1 ? (data.referencia1 as any) : null,
         referencia2: data.referencia2 ? (data.referencia2 as any) : null,
+        diaCobroAsignado: data.diaCobroAsignado?.trim() || null,
       },
     });
 
@@ -190,6 +194,7 @@ export async function createUserAction(data: {
         direccionEstructurada: (newUser.direccionEstructurada as unknown as StructuredAddress) || undefined,
         referencia1: (newUser.referencia1 as unknown as Reference) || undefined,
         referencia2: (newUser.referencia2 as unknown as Reference) || undefined,
+        diaCobroAsignado: newUser.diaCobroAsignado || undefined,
       },
     };
   } catch (error: any) {
@@ -212,6 +217,7 @@ export async function updateUserAction(data: {
   direccionEstructurada?: StructuredAddress;
   referencia1?: Reference;
   referencia2?: Reference;
+  diaCobroAsignado?: string;
   requesterRole?: UserRole;
 }) {
   try {
@@ -250,6 +256,7 @@ export async function updateUserAction(data: {
       direccionEstructurada: data.direccionEstructurada ? (data.direccionEstructurada as any) : null,
       referencia1: data.referencia1 ? (data.referencia1 as any) : null,
       referencia2: data.referencia2 ? (data.referencia2 as any) : null,
+      diaCobroAsignado: data.diaCobroAsignado?.trim() || null,
     };
 
     if (data.newPassword && data.newPassword.trim().length > 0) {
