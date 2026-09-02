@@ -3,25 +3,25 @@
 import React, { useState, useEffect } from 'react';
 import confetti from 'canvas-confetti';
 import {
-  Smartphone,
   CheckCircle2,
   AlertTriangle,
   Phone,
   DollarSign,
-  Calendar,
   Clock,
   Check,
   Search,
-  Receipt,
-  UserCheck,
   Filter,
   Loader2,
+  ShieldCheck,
+  Calendar,
+  XCircle,
+  FileText,
 } from 'lucide-react';
 import { useImpulsoStore } from '@/store/useImpulsoStore';
 import { InstallmentStatusBadge } from '@/components/shared/StatusBadges';
 import { formatCurrency, formatDate, formatDateWithDay, getTodayDateString } from '@/lib/utils';
-import { AmortizationInstallment, Loan } from '@/types';
-import { registerPaymentAction } from '@/app/actions/paymentActions';
+import { AmortizationInstallment, Loan, PaymentRecord } from '@/types';
+import { registerPaymentAction, authorizePaymentAction } from '@/app/actions/paymentActions';
 
 interface CollectionItem {
   loan: Loan;
@@ -31,7 +31,7 @@ interface CollectionItem {
 }
 
 export default function CollectionPage() {
-  const { loans, clients, users, currentUser, loadDataFromDB } = useImpulsoStore();
+  const { loans, clients, users, payments, currentUser, loadDataFromDB } = useImpulsoStore();
   const [isPageLoading, setIsPageLoading] = useState(true);
 
   useEffect(() => {
@@ -48,8 +48,9 @@ export default function CollectionPage() {
   const todayStr = getTodayDateString();
 
   const isPromotorUser = currentUser.role === 'Promotor de Campo';
+  const isAdminUser = currentUser.role === 'Administrador';
 
-  // Catálogo estricto de promotores (obtenido directamente de los usuarios en la BD)
+  // Catálogo de promotores
   const promoterCatalog = users
     .filter((u) => u.estatus === 'Activo')
     .map((u) => ({
@@ -58,7 +59,7 @@ export default function CollectionPage() {
       diaCobro: u.diaCobroAsignado || 'Sin día',
     }));
 
-  const [activeTab, setActiveTab] = useState<'pendientes' | 'mora' | 'pagados'>('pendientes');
+  const [activeTab, setActiveTab] = useState<'pendientes' | 'mora' | 'pagados' | 'autorizaciones'>('pendientes');
   const [searchTerm, setSearchTerm] = useState('');
   const [promotorFilter, setPromotorFilter] = useState<string>(
     isPromotorUser ? currentUser.name : 'todos'
@@ -71,8 +72,20 @@ export default function CollectionPage() {
   const [metodoPago, setMetodoPago] = useState<'Efectivo' | 'Transferencia' | 'Tarjeta'>('Efectivo');
   const [nota, setNota] = useState('');
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Extract collection items strictly for today's due date, overdue items, or today's paid items
+  // Extemporaneous Payment Fields
+  const [esCobroExtemporaneo, setEsCobroExtemporaneo] = useState(false);
+  const [fechaCobroReal, setFechaCobroReal] = useState(todayStr);
+  const [motivoExtemporaneo, setMotivoExtemporaneo] = useState('');
+
+  // Admin Reject Modal State
+  const [rejectingPayment, setRejectingPayment] = useState<PaymentRecord | null>(null);
+  const [motivoRechazoInput, setMotivoRechazoInput] = useState('');
+  const [isAuthorizing, setIsAuthorizing] = useState(false);
+  const [authFeedback, setAuthFeedback] = useState<{ id: string; message: string } | null>(null);
+
+  // Extract collection items
   const collectionList: CollectionItem[] = [];
 
   loans.forEach((loan) => {
@@ -92,6 +105,7 @@ export default function CollectionPage() {
       if (
         isToday ||
         isOverdue ||
+        installment.estado === 'En Revisión' ||
         (installment.estado === 'Pagado' && (installment.fechaPagoReal === todayStr || installment.fechaPago?.startsWith(todayStr)))
       ) {
         collectionList.push({
@@ -101,7 +115,7 @@ export default function CollectionPage() {
           },
           installment: {
             ...installment,
-            estado: isOverdue ? 'Vencido' : installment.estado,
+            estado: isOverdue && installment.estado !== 'En Revisión' ? 'Vencido' : installment.estado,
           },
           isOverdue,
           isToday,
@@ -109,6 +123,8 @@ export default function CollectionPage() {
       }
     });
   });
+
+  const pendingAuthorizations = payments.filter((p) => p.estatus === 'Pendiente');
 
   const filteredCollection = collectionList.filter((item) => {
     const matchesSearch =
@@ -125,15 +141,12 @@ export default function CollectionPage() {
     if (!matchesPromotor) return false;
 
     if (activeTab === 'pendientes') {
-      // Pestaña Ruta de Cobro de Hoy: Cuotas del día de hoy MÁS todas las cuotas en mora pendientes
       return (item.isToday || item.isOverdue) && item.installment.estado !== 'Pagado';
     }
     if (activeTab === 'mora') {
-      // Pestaña En Mora: SOLO cuotas vencidas/en mora que siguen pendientes
       return item.isOverdue && item.installment.estado !== 'Pagado';
     }
     if (activeTab === 'pagados') {
-      // Pestaña Cobrados: Cuotas cobradas el día de hoy
       return item.installment.estado === 'Pagado';
     }
     return true;
@@ -141,32 +154,45 @@ export default function CollectionPage() {
 
   const openPaymentModal = (item: CollectionItem) => {
     setSelectedItem(item);
-    const cuotaFaltante = item.installment.cuotaTotal - item.installment.montoPagado;
+    const cuotaFaltante = Math.round((item.installment.cuotaTotal - item.installment.montoPagado) * 100) / 100;
     const recargoMora = item.installment.recargoPenalizacion || item.installment.penalizacionesMora || (item.isOverdue ? 100 : 0);
-    setMontoRecibido(cuotaFaltante);
+
+    // FIX 1: Inicializar con el total sugerido (cuota + mora)
+    setMontoRecibido(Math.round((cuotaFaltante + recargoMora) * 100) / 100);
     setPenalizacionCobrada(recargoMora);
     setMetodoPago('Efectivo');
     setNota('');
+    setEsCobroExtemporaneo(false);
+    setFechaCobroReal(item.installment.fechaVencimiento);
+    setMotivoExtemporaneo('');
     setFeedbackMessage(null);
   };
-
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleRegisterPayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedItem || isSubmitting) return;
 
-    // --- VALIDACIONES ESTRUCTURADAS (DE ARRIBA HACIA ABAJO SEGÚN EL FORMULARIO) ---
+    // --- VALIDACIONES SECUENCIALES VISUALES (DE ARRIBA HACIA ABAJO) ---
     // 1. Monto Recibido
     if (!montoRecibido || Number(montoRecibido) <= 0) {
       setFeedbackMessage('El Monto Recibido es obligatorio y debe ser mayor a $0.');
       return;
     }
 
-    // 2. Penalización por Mora
-    if (penalizacionCobrada < 0) {
-      setFeedbackMessage('La penalización por mora no puede ser un monto negativo.');
-      return;
+    // 2. Validación de Cobro Extemporáneo (si está activado)
+    if (esCobroExtemporaneo) {
+      if (!fechaCobroReal || fechaCobroReal.trim() === '') {
+        setFeedbackMessage('Debes indicar la fecha real en que recibiste el pago.');
+        return;
+      }
+      if (fechaCobroReal > todayStr) {
+        setFeedbackMessage('La fecha de cobro real no puede ser una fecha futura.');
+        return;
+      }
+      if (!motivoExtemporaneo || motivoExtemporaneo.trim().length < 8) {
+        setFeedbackMessage('El motivo o justificación del cobro extemporáneo es obligatorio (mínimo 8 caracteres).');
+        return;
+      }
     }
 
     setIsSubmitting(true);
@@ -175,45 +201,93 @@ export default function CollectionPage() {
         prestamoId: selectedItem.loan.id,
         numeroCuota: selectedItem.installment.numeroCuota,
         montoRecibido: Number(montoRecibido),
-        penalizacionCobrada: Number(penalizacionCobrada),
+        penalizacionCobrada: esCobroExtemporaneo ? 0 : Number(penalizacionCobrada),
         metodoPago,
         cobradorNombre: currentUser.name,
         nota,
+        esExtemporaneo: esCobroExtemporaneo,
+        fechaCobroReal: esCobroExtemporaneo ? fechaCobroReal : undefined,
+        motivoExtemporaneo: esCobroExtemporaneo ? motivoExtemporaneo : undefined,
       });
 
       if (result.success) {
         setFeedbackMessage(result.message);
         await loadDataFromDB();
-        // Trigger Confetti Effect
-        confetti({
-          particleCount: 80,
-          spread: 60,
-          origin: { y: 0.7 },
-        });
+
+        if (!esCobroExtemporaneo) {
+          confetti({
+            particleCount: 80,
+            spread: 60,
+            origin: { y: 0.7 },
+          });
+        }
 
         setTimeout(() => {
           setSelectedItem(null);
           setFeedbackMessage(null);
-        }, 1200);
+        }, 1500);
       } else {
-        setFeedbackMessage(result.message || 'Error al registrar pago.');
+        setFeedbackMessage(result.message || 'Error al registrar el pago.');
       }
-    } catch (err: any) {
-      setFeedbackMessage(err.message || 'Error al procesar el pago.');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Error al procesar el pago.';
+      setFeedbackMessage(message);
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  const handleAuthorizeDecision = async (
+    paymentId: string,
+    decision: 'APROBAR' | 'RECHAZAR',
+    motivoRechazo?: string
+  ) => {
+    setIsAuthorizing(true);
+    try {
+      const res = await authorizePaymentAction({
+        paymentId,
+        decision,
+        adminNombre: currentUser.name,
+        motivoRechazo,
+      });
+
+      if (res.success) {
+        setAuthFeedback({ id: paymentId, message: res.message });
+        await loadDataFromDB();
+        if (decision === 'APROBAR') {
+          confetti({
+            particleCount: 60,
+            spread: 50,
+            origin: { y: 0.6 },
+          });
+        }
+        setTimeout(() => {
+          setAuthFeedback(null);
+          setRejectingPayment(null);
+          setMotivoRechazoInput('');
+        }, 1400);
+      } else {
+        setAuthFeedback({ id: paymentId, message: res.message });
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Error al procesar dictamen.';
+      setAuthFeedback({ id: paymentId, message });
+    } finally {
+      setIsAuthorizing(false);
+    }
+  };
+
+  // Manejo estricto de tecla Escape según .agents/rules/modals.md
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && selectedItem && !isSubmitting) {
-        setSelectedItem(null);
+      if (e.key === 'Escape') {
+        if (selectedItem && !isSubmitting) setSelectedItem(null);
+        if (rejectingPayment && !isAuthorizing) setRejectingPayment(null);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedItem, isSubmitting]);
+  }, [selectedItem, isSubmitting, rejectingPayment, isAuthorizing]);
 
   if (isPageLoading) {
     return (
@@ -271,10 +345,10 @@ export default function CollectionPage() {
       </div>
 
       {/* Collection Tabs */}
-      <div className="flex rounded-xl bg-slate-900/80 p-1 border border-slate-800 text-xs">
+      <div className="flex flex-wrap rounded-xl bg-slate-900/80 p-1 border border-slate-800 text-xs gap-1">
         <button
           onClick={() => setActiveTab('pendientes')}
-          className={`flex-1 py-2.5 rounded-lg font-bold transition-all flex items-center justify-center gap-1.5 ${
+          className={`flex-1 min-w-[120px] py-2.5 rounded-lg font-bold transition-all flex items-center justify-center gap-1.5 ${
             activeTab === 'pendientes'
               ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
               : 'text-slate-400 hover:text-white'
@@ -285,7 +359,7 @@ export default function CollectionPage() {
 
         <button
           onClick={() => setActiveTab('mora')}
-          className={`flex-1 py-2.5 rounded-lg font-bold transition-all flex items-center justify-center gap-1.5 ${
+          className={`flex-1 min-w-[120px] py-2.5 rounded-lg font-bold transition-all flex items-center justify-center gap-1.5 ${
             activeTab === 'mora'
               ? 'bg-rose-500 text-white shadow-md shadow-rose-500/20'
               : 'text-slate-400 hover:text-white'
@@ -296,7 +370,7 @@ export default function CollectionPage() {
 
         <button
           onClick={() => setActiveTab('pagados')}
-          className={`flex-1 py-2.5 rounded-lg font-bold transition-all flex items-center justify-center gap-1.5 ${
+          className={`flex-1 min-w-[120px] py-2.5 rounded-lg font-bold transition-all flex items-center justify-center gap-1.5 ${
             activeTab === 'pagados'
               ? 'bg-indigo-500 text-white shadow-md shadow-indigo-500/20'
               : 'text-slate-400 hover:text-white'
@@ -304,107 +378,222 @@ export default function CollectionPage() {
         >
           <CheckCircle2 className="w-3.5 h-3.5" /> Cobrados Hoy ({collectionList.filter(i => i.installment.estado === 'Pagado').length})
         </button>
-      </div>
 
-      {/* Collection Cards List */}
-      <div className="space-y-3">
-        {filteredCollection.map((item, idx) => {
-          const recargoMoraCard = item.installment.recargoPenalizacion || item.installment.penalizacionesMora || (item.isOverdue ? 100 : 0);
-          const cuotaFaltanteCard = item.installment.cuotaTotal - item.installment.montoPagado;
-          const totalACobrarCard = item.isOverdue && !item.installment.recargoPenalizacion ? cuotaFaltanteCard + recargoMoraCard : cuotaFaltanteCard;
-
-          return (
-            <div
-              key={`${item.loan.id}-${item.installment.numeroCuota}-${idx}`}
-              className={`glass-panel p-4 rounded-2xl border transition-all ${
-                item.isOverdue
-                  ? 'border-rose-500/40 bg-rose-950/20 shadow-lg shadow-rose-950/20'
-                  : 'border-slate-800 hover:border-emerald-500/40'
-              }`}
-            >
-              <div className="flex justify-between items-start mb-2">
-                <div>
-                  <h3 className="font-extrabold text-white text-base leading-tight">
-                    {item.loan.clienteNombre}
-                  </h3>
-                  <p className="text-xs text-slate-400 font-mono mt-0.5">
-                    Folio: {item.loan.folio} • Cuota #{item.installment.numeroCuota} de {item.loan.plazoCantidad}
-                  </p>
-                  <p className="text-[11px] text-emerald-400 font-semibold mt-0.5">
-                    Promotor Asignado: {item.loan.promotorAsignado}
-                  </p>
-                </div>
-
-                <InstallmentStatusBadge status={item.installment.estado} />
-              </div>
-
-              {/* Installment Info */}
-              <div className="grid grid-cols-2 gap-2 my-3 p-3 rounded-xl bg-slate-900/80 border border-slate-800 text-xs">
-                <div>
-                  <span className="text-slate-400 text-[11px]">Vencimiento:</span>
-                  <p className={`font-bold ${item.isOverdue ? 'text-rose-400' : 'text-slate-200'}`}>
-                    {formatDateWithDay(item.installment.fechaVencimiento)}
-                  </p>
-                </div>
-
-                <div>
-                  <span className="text-slate-400 text-[11px]">Monto a Cobrar:</span>
-                  <p className={`font-black text-sm ${item.isOverdue ? 'text-rose-300' : 'text-emerald-400'}`}>
-                    {formatCurrency(totalACobrarCard)}
-                  </p>
-                  {item.isOverdue && recargoMoraCard > 0 && (
-                    <span className="block text-[10px] text-rose-400 font-extrabold mt-0.5">
-                      ⚠️ Incluye +{formatCurrency(recargoMoraCard)} recargo mora
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* Touch Action Buttons */}
-              <div className="flex items-center gap-2 pt-1">
-                {item.loan.clienteTelefono && (
-                  <a
-                    href={`tel:${item.loan.clienteTelefono.replace(/\s+/g, '')}`}
-                    className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 flex items-center justify-center"
-                    title={`Llamar a ${item.loan.clienteNombre}`}
-                  >
-                    <Phone className="w-4 h-4 text-emerald-400" />
-                  </a>
-                )}
-
-                {item.installment.estado !== 'Pagado' ? (
-                  <button
-                    onClick={() => openPaymentModal(item)}
-                    className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-black text-xs shadow-lg transition-all active:scale-95 ${
-                      item.isOverdue
-                        ? 'bg-rose-500 hover:bg-rose-400 text-white shadow-rose-500/20'
-                        : 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 shadow-emerald-500/20'
-                    }`}
-                  >
-                    <DollarSign className="w-4 h-4 stroke-[3]" />
-                    Registrar Cobro ({formatCurrency(totalACobrarCard)})
-                  </button>
-                ) : (
-                  <div className="flex-1 py-2 px-3 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 text-xs font-bold text-center flex items-center justify-center gap-1.5">
-                    <Check className="w-4 h-4" /> Cobro Registrado
-                  </div>
-                )}
-              </div>
-            </div>
-          );
-        })}
-
-        {filteredCollection.length === 0 && (
-          <div className="p-12 text-center text-slate-500 glass-panel rounded-2xl border border-slate-800">
-            No hay cobros asignados a esta ruta/promotor.
-          </div>
+        {isAdminUser && (
+          <button
+            onClick={() => setActiveTab('autorizaciones')}
+            className={`flex-1 min-w-[150px] py-2.5 rounded-lg font-bold transition-all flex items-center justify-center gap-1.5 ${
+              activeTab === 'autorizaciones'
+                ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
+                : 'text-amber-400 hover:text-amber-300'
+            }`}
+          >
+            <ShieldCheck className="w-3.5 h-3.5" />
+            Autorizaciones ({pendingAuthorizations.length})
+            {pendingAuthorizations.length > 0 && (
+              <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping ml-0.5" />
+            )}
+          </button>
         )}
       </div>
 
-      {/* Modal Express de Cobro en Campo */}
+      {/* VIEW: BANDEJA DE AUTORIZACIONES PENDIENTES (SOLO ADMIN) */}
+      {activeTab === 'autorizaciones' && isAdminUser ? (
+        <div className="space-y-3">
+          {pendingAuthorizations.map((p) => (
+            <div
+              key={p.id}
+              className="glass-panel p-4 rounded-2xl border border-amber-500/30 bg-amber-950/10 space-y-3 shadow-lg"
+            >
+              <div className="flex justify-between items-start">
+                <div>
+                  <span className="text-[10px] font-mono font-bold text-amber-400 uppercase tracking-wider block">
+                    Recibo: {p.folioRecibo} • Préstamo: {p.prestamoFolio}
+                  </span>
+                  <h3 className="font-extrabold text-white text-base leading-tight mt-0.5">
+                    {p.clienteNombre}
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Cobrado por: <strong className="text-slate-200">{p.cobradorNombre}</strong>
+                  </p>
+                </div>
+
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                  <Clock className="w-3.5 h-3.5 text-amber-400" />
+                  Pendiente de Aprobación
+                </span>
+              </div>
+
+              {/* Data comparison grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-3 rounded-xl bg-slate-900/90 border border-slate-800 text-xs">
+                <div>
+                  <span className="text-slate-400 text-[11px] block">Cuota Solicitada:</span>
+                  <strong className="text-white">Cuota #{p.numeroCuota}</strong>
+                </div>
+                <div>
+                  <span className="text-slate-400 text-[11px] block">Monto Cobrado:</span>
+                  <strong className="text-emerald-400 font-mono text-sm">{formatCurrency(p.montoRecibido)}</strong>
+                </div>
+                <div>
+                  <span className="text-slate-400 text-[11px] block">Fecha Cobro Real:</span>
+                  <strong className="text-amber-300 font-semibold">{p.fechaCobroReal || p.fechaPago}</strong>
+                </div>
+              </div>
+
+              {/* Justification Box */}
+              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs space-y-1">
+                <span className="text-slate-400 font-bold text-[11px] flex items-center gap-1">
+                  <FileText className="w-3 h-3 text-amber-400" /> Justificación del Promotor:
+                </span>
+                <p className="text-slate-200 italic">
+                  &ldquo;{p.motivoExtemporaneo || 'Sin motivo reportado.'}&rdquo;
+                </p>
+              </div>
+
+              {authFeedback?.id === p.id ? (
+                <div className="p-3 text-center text-emerald-400 font-bold text-xs bg-emerald-500/10 rounded-xl border border-emerald-500/30 animate-pulse">
+                  {authFeedback.message}
+                </div>
+              ) : (
+                <div className="flex gap-2 pt-1">
+                  <button
+                    disabled={isAuthorizing}
+                    onClick={() => setRejectingPayment(p)}
+                    className="flex-1 py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-rose-950/40 hover:text-rose-300 text-slate-300 border border-slate-700 font-bold text-xs transition-all disabled:opacity-50"
+                  >
+                    Rechazar
+                  </button>
+                  <button
+                    disabled={isAuthorizing}
+                    onClick={() => handleAuthorizeDecision(p.id, 'APROBAR')}
+                    className="flex-2 py-2.5 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-1.5 transition-all disabled:opacity-50"
+                  >
+                    {isAuthorizing ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Check className="w-4 h-4 stroke-[3]" />
+                    )}
+                    Aprobar en Fecha (Condonar Mora)
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+
+          {pendingAuthorizations.length === 0 && (
+            <div className="p-12 text-center text-slate-500 glass-panel rounded-2xl border border-slate-800">
+              No hay solicitudes de pagos extemporáneos pendientes de autorización.
+            </div>
+          )}
+        </div>
+      ) : (
+        /* VIEW: LISTA NORMAL DE COBRANZA */
+        <div className="space-y-3">
+          {filteredCollection.map((item, idx) => {
+            const isEnRevision = item.installment.estado === 'En Revisión';
+            const recargoMoraCard = item.installment.recargoPenalizacion || item.installment.penalizacionesMora || (item.isOverdue ? 100 : 0);
+            const cuotaFaltanteCard = Math.round((item.installment.cuotaTotal - item.installment.montoPagado) * 100) / 100;
+            const totalACobrarCard = item.isOverdue && !item.installment.recargoPenalizacion ? cuotaFaltanteCard + recargoMoraCard : cuotaFaltanteCard;
+
+            return (
+              <div
+                key={`${item.loan.id}-${item.installment.numeroCuota}-${idx}`}
+                className={`glass-panel p-4 rounded-2xl border transition-all ${
+                  isEnRevision
+                    ? 'border-indigo-500/40 bg-indigo-950/20 shadow-md'
+                    : item.isOverdue
+                    ? 'border-rose-500/40 bg-rose-950/20 shadow-lg shadow-rose-950/20'
+                    : 'border-slate-800 hover:border-emerald-500/40'
+                }`}
+              >
+                <div className="flex justify-between items-start mb-2">
+                  <div>
+                    <h3 className="font-extrabold text-white text-base leading-tight">
+                      {item.loan.clienteNombre}
+                    </h3>
+                    <p className="text-xs text-slate-400 font-mono mt-0.5">
+                      Folio: {item.loan.folio} • Cuota #{item.installment.numeroCuota} de {item.loan.plazoCantidad}
+                    </p>
+                    <p className="text-[11px] text-emerald-400 font-semibold mt-0.5">
+                      Promotor Asignado: {item.loan.promotorAsignado}
+                    </p>
+                  </div>
+
+                  <InstallmentStatusBadge status={item.installment.estado} />
+                </div>
+
+                {/* Installment Info */}
+                <div className="grid grid-cols-2 gap-2 my-3 p-3 rounded-xl bg-slate-900/80 border border-slate-800 text-xs">
+                  <div>
+                    <span className="text-slate-400 text-[11px]">Vencimiento:</span>
+                    <p className={`font-bold ${item.isOverdue ? 'text-rose-400' : 'text-slate-200'}`}>
+                      {formatDateWithDay(item.installment.fechaVencimiento)}
+                    </p>
+                  </div>
+
+                  <div>
+                    <span className="text-slate-400 text-[11px]">Monto a Cobrar:</span>
+                    <p className={`font-black text-sm ${item.isOverdue ? 'text-rose-300' : 'text-emerald-400'}`}>
+                      {formatCurrency(totalACobrarCard)}
+                    </p>
+                    {item.isOverdue && recargoMoraCard > 0 && !isEnRevision && (
+                      <span className="block text-[10px] text-rose-400 font-extrabold mt-0.5">
+                        ⚠️ Incluye +{formatCurrency(recargoMoraCard)} recargo mora
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Touch Action Buttons */}
+                <div className="flex items-center gap-2 pt-1">
+                  {item.loan.clienteTelefono && (
+                    <a
+                      href={`tel:${item.loan.clienteTelefono.replace(/\s+/g, '')}`}
+                      className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 flex items-center justify-center"
+                      title={`Llamar a ${item.loan.clienteNombre}`}
+                    >
+                      <Phone className="w-4 h-4 text-emerald-400" />
+                    </a>
+                  )}
+
+                  {isEnRevision ? (
+                    <div className="flex-1 py-3 px-3 rounded-xl bg-indigo-500/10 text-indigo-300 border border-indigo-500/30 text-xs font-bold text-center flex items-center justify-center gap-1.5">
+                      <Clock className="w-4 h-4 text-indigo-400" /> Solicitud en Revisión de Administrador
+                    </div>
+                  ) : item.installment.estado !== 'Pagado' ? (
+                    <button
+                      onClick={() => openPaymentModal(item)}
+                      className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-black text-xs shadow-lg transition-all active:scale-95 ${
+                        item.isOverdue
+                          ? 'bg-rose-500 hover:bg-rose-400 text-white shadow-rose-500/20'
+                          : 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 shadow-emerald-500/20'
+                      }`}
+                    >
+                      <DollarSign className="w-4 h-4 stroke-[3]" />
+                      Registrar Cobro ({formatCurrency(totalACobrarCard)})
+                    </button>
+                  ) : (
+                    <div className="flex-1 py-2 px-3 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 text-xs font-bold text-center flex items-center justify-center gap-1.5">
+                      <Check className="w-4 h-4" /> Cobro Registrado
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+
+          {filteredCollection.length === 0 && (
+            <div className="p-12 text-center text-slate-500 glass-panel rounded-2xl border border-slate-800">
+              No hay cobros asignados a esta ruta/promotor.
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* MODAL EXPRESS DE COBRO EN CAMPO */}
       {selectedItem && (
         <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4">
-          <div className="glass-panel w-full max-w-md p-6 rounded-t-3xl sm:rounded-2xl border border-slate-800 shadow-2xl space-y-4">
+          <div className="glass-panel w-full max-w-md p-6 rounded-t-3xl sm:rounded-2xl border border-slate-800 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center pb-2 border-b border-slate-800">
               <div>
                 <span className="text-[10px] uppercase tracking-wider font-extrabold text-emerald-400">
@@ -413,6 +602,7 @@ export default function CollectionPage() {
                 <h2 className="text-lg font-extrabold text-white">{selectedItem.loan.clienteNombre}</h2>
               </div>
               <button
+                type="button"
                 onClick={() => setSelectedItem(null)}
                 className="p-1 text-slate-400 hover:text-white"
               >
@@ -420,7 +610,7 @@ export default function CollectionPage() {
               </button>
             </div>
 
-            {feedbackMessage ? (
+            {feedbackMessage && !isSubmitting ? (
               <div className="p-6 text-center space-y-3">
                 <div className="w-12 h-12 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex items-center justify-center mx-auto animate-bounce">
                   <CheckCircle2 className="w-7 h-7" />
@@ -445,50 +635,113 @@ export default function CollectionPage() {
                   </div>
                 </div>
 
-                {/* Total Sugerido a Recaudar Banner */}
+                {/* FIX 2: Penalización por Mora NO EDITABLE (Informativa y fija) */}
+                {selectedItem.isOverdue && !esCobroExtemporaneo && (
+                  <div className="p-3 rounded-xl bg-rose-950/30 border border-rose-500/30 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                      <div>
+                        <span className="text-xs font-bold text-rose-300 block">Recargo por Mora:</span>
+                        <span className="text-[10px] text-rose-400/80">Establecido por supervisor según contrato</span>
+                      </div>
+                    </div>
+                    <strong className="text-rose-300 font-mono text-base font-black">
+                      +{formatCurrency(penalizacionCobrada)}
+                    </strong>
+                  </div>
+                )}
+
+                {/* Banner Total Sugerido */}
                 <div className="p-3.5 rounded-xl bg-slate-900 border border-emerald-500/40 flex justify-between items-center shadow-lg">
                   <div>
                     <span className="text-slate-200 font-extrabold text-xs block">Total a Recaudar al Cliente:</span>
-                    {selectedItem.isOverdue && (
+                    {esCobroExtemporaneo ? (
+                      <span className="text-[10px] text-indigo-400 font-bold">Cobro en fecha reportado (sin mora)</span>
+                    ) : selectedItem.isOverdue ? (
                       <span className="text-[10px] text-rose-400 font-bold">⚠️ Incluye penalización por mora</span>
-                    )}
+                    ) : null}
                   </div>
                   <strong className="text-emerald-400 font-black text-xl font-mono">
-                    {formatCurrency(Number(montoRecibido) + Number(penalizacionCobrada))}
+                    {formatCurrency(Number(montoRecibido))}
                   </strong>
                 </div>
 
-                {/* Monto Recibido Input */}
+                {/* FIX 1: Monto Recibido Input (editable para registrar abonos o pagos completos) */}
                 <div>
                   <label className="block text-slate-300 font-semibold mb-1">Monto Recibido ($ MXN)</label>
                   <input
                     type="number"
-                    step="50"
+                    step="0.01"
                     required
                     value={montoRecibido}
                     onChange={(e) => setMontoRecibido(Number(e.target.value))}
                     className="w-full px-4 py-3 rounded-xl bg-slate-900 border border-slate-700 text-emerald-400 font-black text-xl focus:outline-none focus:border-emerald-500"
                   />
-                  {montoRecibido < selectedItem.installment.cuotaTotal && (
+                  {montoRecibido < (esCobroExtemporaneo ? selectedItem.installment.cuotaTotal : selectedItem.installment.cuotaTotal + penalizacionCobrada) && (
                     <p className="text-[11px] text-amber-400 mt-1">
-                      ⚠️ Se registrará como un Abono Parcial a la cuota.
+                      ⚠️ El monto ingresado es menor al total sugerido.
                     </p>
                   )}
                 </div>
 
-                {/* Penalización por Mora */}
+                {/* SECCIÓN DE COBRO EXTEMPORÁNEO (SOLO SI TIENE MORA) */}
                 {selectedItem.isOverdue && (
-                  <div>
-                    <label className="block text-rose-300 font-semibold mb-1 flex items-center gap-1">
-                      <AlertTriangle className="w-3.5 h-3.5 text-rose-400" /> Penalización por Mora ($ MXN)
+                  <div className="p-3.5 rounded-xl bg-slate-900/90 border border-indigo-500/40 space-y-3">
+                    <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={esCobroExtemporaneo}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setEsCobroExtemporaneo(checked);
+                          const cuotaFaltante = Math.round((selectedItem.installment.cuotaTotal - selectedItem.installment.montoPagado) * 100) / 100;
+                          if (checked) {
+                            setMontoRecibido(cuotaFaltante);
+                          } else {
+                            setMontoRecibido(Math.round((cuotaFaltante + penalizacionCobrada) * 100) / 100);
+                          }
+                        }}
+                        className="mt-0.5 w-4 h-4 rounded text-indigo-500 bg-slate-800 border-slate-700 focus:ring-indigo-500"
+                      />
+                      <div>
+                        <span className="text-xs font-bold text-indigo-300 block">
+                          ¿Cobraste esta cuota en fecha y no pudiste registrarla?
+                        </span>
+                        <span className="text-[10px] text-slate-400 block mt-0.5">
+                          Indica la fecha real de cobro. Requerirá autorización del Administrador para aplicarse sin mora.
+                        </span>
+                      </div>
                     </label>
-                    <input
-                      type="number"
-                      step="50"
-                      value={penalizacionCobrada}
-                      onChange={(e) => setPenalizacionCobrada(Number(e.target.value))}
-                      className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-rose-500/40 text-rose-300 font-bold focus:outline-none"
-                    />
+
+                    {esCobroExtemporaneo && (
+                      <div className="space-y-3 pt-2 border-t border-indigo-500/20">
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                            Fecha Real de Recepción del Dinero *
+                          </label>
+                          <input
+                            type="date"
+                            max={todayStr}
+                            value={fechaCobroReal}
+                            onChange={(e) => setFechaCobroReal(e.target.value)}
+                            className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-indigo-500"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                            Motivo o Justificación del Retraso *
+                          </label>
+                          <textarea
+                            rows={2}
+                            placeholder="Ej. Sin señal telefónica en comunidad rural durante la ruta..."
+                            value={motivoExtemporaneo}
+                            onChange={(e) => setMotivoExtemporaneo(e.target.value)}
+                            className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-indigo-500 resize-none"
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -518,14 +771,18 @@ export default function CollectionPage() {
                   <label className="block text-slate-300 font-semibold mb-1">Comentario o Nota (Opcional)</label>
                   <input
                     type="text"
-                    placeholder="Ej. Entregó recibo impreso a mano"
+                    placeholder="Ej. Entregó recibo en papel"
                     value={nota}
                     onChange={(e) => setNota(e.target.value)}
                     className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs"
                   />
                 </div>
 
-                <div className="pt-3 flex gap-2">
+                {feedbackMessage && (
+                  <p className="text-rose-400 font-bold text-xs">{feedbackMessage}</p>
+                )}
+
+                <div className="pt-2 flex gap-2">
                   <button
                     type="button"
                     disabled={isSubmitting}
@@ -537,12 +794,18 @@ export default function CollectionPage() {
                   <button
                     type="submit"
                     disabled={isSubmitting}
-                    className="w-2/3 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-xs shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className={`w-2/3 py-3 rounded-xl font-extrabold text-xs shadow-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${
+                      esCobroExtemporaneo
+                        ? 'bg-indigo-500 hover:bg-indigo-400 text-white shadow-indigo-500/20'
+                        : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-emerald-500/20'
+                    }`}
                   >
                     {isSubmitting ? (
                       <>
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" /> Registrando...
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" /> Procesando...
                       </>
+                    ) : esCobroExtemporaneo ? (
+                      'Enviar a Autorización'
                     ) : (
                       'Confirmar Cobro'
                     )}
@@ -550,6 +813,62 @@ export default function CollectionPage() {
                 </div>
               </form>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE RECHAZO DE PAGO EXTEMPORÁNEO (ADMINISTRADOR) */}
+      {rejectingPayment && (
+        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="glass-panel w-full max-w-md p-6 rounded-2xl border border-rose-500/40 shadow-2xl space-y-4">
+            <div className="flex justify-between items-center pb-2 border-b border-slate-800">
+              <h3 className="text-base font-extrabold text-white flex items-center gap-2">
+                <XCircle className="w-5 h-5 text-rose-400" />
+                Rechazar Cobro Extemporáneo
+              </h3>
+              <button
+                type="button"
+                onClick={() => setRejectingPayment(null)}
+                className="text-slate-400 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="text-xs space-y-2 text-slate-300">
+              <p>
+                Al rechazar este pago, la cuota regresará a estado <strong>En Mora</strong> y se exigirá el pago de la penalización correspondiente.
+              </p>
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">Motivo del Rechazo *</label>
+                <textarea
+                  rows={3}
+                  placeholder="Explica el motivo por el cual no procede la condonación..."
+                  value={motivoRechazoInput}
+                  onChange={(e) => setMotivoRechazoInput(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-rose-500 resize-none"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <button
+                type="button"
+                disabled={isAuthorizing}
+                onClick={() => setRejectingPayment(null)}
+                className="w-1/3 py-2.5 rounded-xl bg-slate-800 text-slate-300 font-semibold text-xs"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={isAuthorizing || !motivoRechazoInput.trim()}
+                onClick={() => handleAuthorizeDecision(rejectingPayment.id, 'RECHAZAR', motivoRechazoInput)}
+                className="w-2/3 py-2.5 rounded-xl bg-rose-500 hover:bg-rose-400 text-white font-bold text-xs shadow-lg shadow-rose-500/20 flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {isAuthorizing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Confirmar Rechazo'}
+              </button>
+            </div>
           </div>
         </div>
       )}

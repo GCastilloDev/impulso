@@ -556,12 +556,15 @@ export default function LoansPage() {
                 <tbody className="divide-y divide-slate-800/60 font-mono">
                   {selectedLoanModal.tablaAmortizacion.map((c) => {
                     const isMora = c.estado === 'Mora' || c.estado === 'Vencido';
+                    const isEnRevision = c.estado === 'En Revisión';
                     const isPagado = c.estado === 'Pagado';
                     return (
                       <tr
                         key={c.numeroCuota}
                         className={
-                          isMora
+                          isEnRevision
+                            ? 'bg-indigo-500/15 border-l-4 border-l-indigo-500 hover:bg-indigo-500/25 transition-all text-indigo-200 font-semibold'
+                            : isMora
                             ? 'bg-rose-500/15 border-l-4 border-l-rose-500 hover:bg-rose-500/25 transition-all text-rose-200 font-semibold'
                             : isPagado
                             ? 'bg-emerald-500/5 hover:bg-slate-800/40 text-slate-300'
