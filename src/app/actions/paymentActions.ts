@@ -2,7 +2,7 @@
 
 import { unstable_noStore as noStore } from 'next/cache';
 import { db } from '@/lib/db';
-import { PaymentRecord, EstatusPago } from '@/types';
+import { PaymentRecord, EstatusPago, AmortizationInstallment } from '@/types';
 
 export async function getPaymentsAction() {
   noStore();
@@ -24,7 +24,7 @@ export async function getPaymentsAction() {
         montoRecibido: p.montoRecibido,
         penalizacionCobrada: p.penalizacionCobrada,
         fechaPago: p.fechaPago.toISOString().split('T')[0],
-        metodoPago: p.metodoPago as any,
+        metodoPago: p.metodoPago as PaymentRecord['metodoPago'],
         cobradorNombre: p.cobradorNombre,
         esAbonoParcial: p.esAbonoParcial,
         nota: p.nota || undefined,
@@ -37,9 +37,10 @@ export async function getPaymentsAction() {
         motivoRechazo: p.motivoRechazo || undefined,
       })) as PaymentRecord[],
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Error al obtener pagos.';
     console.error('Error fetching payments:', error);
-    return { success: false, message: error.message || 'Error al obtener pagos.', payments: [] };
+    return { success: false, message, payments: [] };
   }
 }
 
@@ -64,7 +65,7 @@ export async function getPendingPaymentsAction() {
         montoRecibido: p.montoRecibido,
         penalizacionCobrada: p.penalizacionCobrada,
         fechaPago: p.fechaPago.toISOString().split('T')[0],
-        metodoPago: p.metodoPago as any,
+        metodoPago: p.metodoPago as PaymentRecord['metodoPago'],
         cobradorNombre: p.cobradorNombre,
         esAbonoParcial: p.esAbonoParcial,
         nota: p.nota || undefined,
@@ -77,9 +78,10 @@ export async function getPendingPaymentsAction() {
         motivoRechazo: p.motivoRechazo || undefined,
       })) as PaymentRecord[],
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Error al obtener pagos pendientes.';
     console.error('Error fetching pending payments:', error);
-    return { success: false, message: error.message || 'Error al obtener pagos pendientes.', payments: [] };
+    return { success: false, message, payments: [] };
   }
 }
 
@@ -106,7 +108,9 @@ export async function registerPaymentAction(params: {
 
     const count = await db.paymentRecord.count();
     const folioRecibo = `REC-2026-${String(count + 1).padStart(3, '0')}`;
-    const tabla: any[] = Array.isArray(loan.tablaAmortizacion) ? (loan.tablaAmortizacion as any[]) : [];
+    const tabla: AmortizationInstallment[] = Array.isArray(loan.tablaAmortizacion)
+      ? (loan.tablaAmortizacion as unknown as AmortizationInstallment[])
+      : [];
 
     if (params.esExtemporaneo) {
       // 1. Registro de Pago Extemporáneo (En espera de autorización)
@@ -135,7 +139,7 @@ export async function registerPaymentAction(params: {
         if (cuota.numeroCuota === params.numeroCuota) {
           return {
             ...cuota,
-            estado: 'En Revisión',
+            estado: 'En Revisión' as const,
             fechaPagoReal: params.fechaCobroReal,
           };
         }
@@ -145,7 +149,7 @@ export async function registerPaymentAction(params: {
       await db.loan.update({
         where: { id: loan.id },
         data: {
-          tablaAmortizacion: updatedTabla,
+          tablaAmortizacion: updatedTabla as unknown as object,
         },
       });
 
@@ -163,7 +167,7 @@ export async function registerPaymentAction(params: {
           montoRecibido: newPayment.montoRecibido,
           penalizacionCobrada: 0,
           fechaPago: newPayment.fechaPago.toISOString().split('T')[0],
-          metodoPago: newPayment.metodoPago as any,
+          metodoPago: newPayment.metodoPago as PaymentRecord['metodoPago'],
           cobradorNombre: newPayment.cobradorNombre,
           esAbonoParcial: newPayment.esAbonoParcial,
           nota: newPayment.nota || undefined,
@@ -197,7 +201,7 @@ export async function registerPaymentAction(params: {
       if (cuota.numeroCuota === params.numeroCuota) {
         return {
           ...cuota,
-          estado: 'Pagado',
+          estado: 'Pagado' as const,
           montoPagado: params.montoRecibido,
           fechaPago: new Date().toISOString(),
           fechaPagoReal: new Date().toISOString().split('T')[0],
@@ -207,7 +211,6 @@ export async function registerPaymentAction(params: {
       return cuota;
     });
 
-    // Descontar la cuota regular del saldo pendiente del préstamo (sin contar recargos de mora)
     const cuotaAmortizada = Math.max(0, params.montoRecibido - params.penalizacionCobrada);
     const nuevoSaldo = Math.max(0, loan.saldoPendiente - cuotaAmortizada);
     const todosPagados = updatedTabla.every((c) => c.estado === 'Pagado');
@@ -218,7 +221,7 @@ export async function registerPaymentAction(params: {
       data: {
         saldoPendiente: nuevoSaldo,
         estatus: nuevoEstatus,
-        tablaAmortizacion: updatedTabla,
+        tablaAmortizacion: updatedTabla as unknown as object,
       },
     });
 
@@ -236,16 +239,17 @@ export async function registerPaymentAction(params: {
         montoRecibido: newPayment.montoRecibido,
         penalizacionCobrada: newPayment.penalizacionCobrada,
         fechaPago: newPayment.fechaPago.toISOString().split('T')[0],
-        metodoPago: newPayment.metodoPago as any,
+        metodoPago: newPayment.metodoPago as PaymentRecord['metodoPago'],
         cobradorNombre: newPayment.cobradorNombre,
         esAbonoParcial: newPayment.esAbonoParcial,
         nota: newPayment.nota || undefined,
         estatus: 'Aplicado',
       } as PaymentRecord,
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Error al registrar el pago.';
     console.error('Error registering payment:', error);
-    return { success: false, message: error.message || 'Error al registrar el pago.' };
+    return { success: false, message };
   }
 }
 
@@ -276,10 +280,11 @@ export async function authorizePaymentAction(params: {
       return { success: false, message: 'Préstamo asociado no encontrado.' };
     }
 
-    const tabla: any[] = Array.isArray(loan.tablaAmortizacion) ? (loan.tablaAmortizacion as any[]) : [];
+    const tabla: AmortizationInstallment[] = Array.isArray(loan.tablaAmortizacion)
+      ? (loan.tablaAmortizacion as unknown as AmortizationInstallment[])
+      : [];
 
     if (params.decision === 'APROBAR') {
-      // 1. Aprobar pago y marcar como Aplicado
       await db.paymentRecord.update({
         where: { id: payment.id },
         data: {
@@ -300,7 +305,7 @@ export async function authorizePaymentAction(params: {
           montoCuotaAplicado = cuota.cuotaTotal || payment.montoRecibido;
           return {
             ...cuota,
-            estado: 'Pagado',
+            estado: 'Pagado' as const,
             montoPagado: payment.montoRecibido,
             fechaPago: payment.fechaPago.toISOString(),
             fechaPagoReal: fechaRealStr,
@@ -320,7 +325,7 @@ export async function authorizePaymentAction(params: {
         data: {
           saldoPendiente: nuevoSaldo,
           estatus: nuevoEstatus,
-          tablaAmortizacion: updatedTabla,
+          tablaAmortizacion: updatedTabla as unknown as object,
         },
       });
 
@@ -329,7 +334,6 @@ export async function authorizePaymentAction(params: {
         message: `Pago extemporáneo ${payment.folioRecibo} aprobado exitosamente. La cuota quedó registrada en fecha real sin mora.`,
       };
     } else {
-      // 2. Rechazar pago
       await db.paymentRecord.update({
         where: { id: payment.id },
         data: {
@@ -344,7 +348,7 @@ export async function authorizePaymentAction(params: {
         if (cuota.numeroCuota === payment.numeroCuota) {
           return {
             ...cuota,
-            estado: 'Mora',
+            estado: 'Mora' as const,
           };
         }
         return cuota;
@@ -353,7 +357,7 @@ export async function authorizePaymentAction(params: {
       await db.loan.update({
         where: { id: loan.id },
         data: {
-          tablaAmortizacion: updatedTabla,
+          tablaAmortizacion: updatedTabla as unknown as object,
         },
       });
 
@@ -362,8 +366,9 @@ export async function authorizePaymentAction(params: {
         message: `Pago extemporáneo ${payment.folioRecibo} rechazado. La cuota continúa en mora.`,
       };
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Error al procesar el dictamen.';
     console.error('Error in authorizePaymentAction:', error);
-    return { success: false, message: error.message || 'Error al procesar el dictamen.' };
+    return { success: false, message };
   }
 }
