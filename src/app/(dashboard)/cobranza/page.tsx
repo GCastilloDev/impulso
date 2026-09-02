@@ -16,11 +16,13 @@ import {
   Calendar,
   XCircle,
   FileText,
+  Layers,
 } from 'lucide-react';
 import { useImpulsoStore } from '@/store/useImpulsoStore';
 import { InstallmentStatusBadge } from '@/components/shared/StatusBadges';
-import { formatCurrency, formatDate, formatDateWithDay, getTodayDateString } from '@/lib/utils';
-import { AmortizationInstallment, Loan, PaymentRecord } from '@/types';
+import { formatCurrency, formatDateWithDay, getTodayDateString } from '@/lib/utils';
+import { calculateLateFeeForOverduePayments } from '@/lib/financialCalculators';
+import { AmortizationInstallment, FinancialProduct, Loan, PaymentRecord } from '@/types';
 import { registerPaymentAction, authorizePaymentAction } from '@/app/actions/paymentActions';
 
 interface CollectionItem {
@@ -30,8 +32,48 @@ interface CollectionItem {
   isToday: boolean;
 }
 
+/**
+ * Calcula la penalización por mora de forma dinámica usando las reglas
+ * reales configuradas en el producto financiero asociado al préstamo.
+ */
+function getInstallmentLateFee(
+  installment: AmortizationInstallment,
+  loan: Loan,
+  productsList: FinancialProduct[],
+  today: string
+): number {
+  if (installment.recargoPenalizacion && installment.recargoPenalizacion > 0) {
+    return installment.recargoPenalizacion;
+  }
+  if (installment.penalizacionesMora && installment.penalizacionesMora > 0) {
+    return installment.penalizacionesMora;
+  }
+
+  const isOverdue =
+    installment.estado === 'Mora' ||
+    installment.estado === 'Vencido' ||
+    ((installment.estado === 'Pendiente' || installment.estado === 'Parcial') && installment.fechaVencimiento < today);
+
+  if (!isOverdue) return 0;
+
+  const product = productsList.find(
+    (p) => p.id === loan.productoId || p.nombre.toLowerCase() === loan.productoNombre.toLowerCase()
+  );
+
+  if (product) {
+    return calculateLateFeeForOverduePayments(
+      1,
+      installment.cuotaTotal,
+      product.tipoPenalizacionMora,
+      product.valorPenalizacionMora
+    );
+  }
+
+  return 0;
+}
+
 export default function CollectionPage() {
-  const { loans, clients, users, payments, currentUser, loadDataFromDB } = useImpulsoStore();
+  const { loans, clients, users, products, payments, currentUser, loadDataFromDB } = useImpulsoStore();
   const [isPageLoading, setIsPageLoading] = useState(true);
 
   useEffect(() => {
@@ -59,11 +101,16 @@ export default function CollectionPage() {
       diaCobro: u.diaCobroAsignado || 'Sin día',
     }));
 
+  // Catálogo de productos activos para filtro
+  const activeProducts = products.filter((p) => p.activo && !p.eliminado);
+
   const [activeTab, setActiveTab] = useState<'pendientes' | 'mora' | 'pagados' | 'autorizaciones'>('pendientes');
   const [searchTerm, setSearchTerm] = useState('');
   const [promotorFilter, setPromotorFilter] = useState<string>(
     isPromotorUser ? currentUser.name : 'todos'
   );
+  const [frecuenciaFilter, setFrecuenciaFilter] = useState<'todas' | 'diario' | 'semanal'>('todas');
+  const [productoFilter, setProductoFilter] = useState<string>('todos');
 
   // Payment Modal State
   const [selectedItem, setSelectedItem] = useState<CollectionItem | null>(null);
@@ -101,7 +148,7 @@ export default function CollectionPage() {
       const isToday = installment.fechaVencimiento === todayStr;
 
       // REGLA DE COBRANZA EN CAMPO:
-      // Jamás mostrar cuotas futuras (fechaVencimiento > todayStr)
+      // Jamás mostrar cuotas futuras anticipadas (fechaVencimiento > todayStr)
       if (
         isToday ||
         isOverdue ||
@@ -127,19 +174,35 @@ export default function CollectionPage() {
   const pendingAuthorizations = payments.filter((p) => p.estatus === 'Pendiente');
 
   const filteredCollection = collectionList.filter((item) => {
+    // 1. Filtro por Búsqueda (Cliente o Folio)
     const matchesSearch =
       item.loan.clienteNombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
       item.loan.folio.toLowerCase().includes(searchTerm.toLowerCase());
 
     if (!matchesSearch) return false;
 
-    // Filter by Promotor
+    // 2. Filtro por Promotor
     const matchesPromotor =
       promotorFilter === 'todos' ||
       item.loan.promotorAsignado.toLowerCase().includes(promotorFilter.toLowerCase());
 
     if (!matchesPromotor) return false;
 
+    // 3. Filtro por Frecuencia de Pago (Diario / Semanal)
+    if (frecuenciaFilter !== 'todas') {
+      const matchesFrecuencia = item.loan.frecuenciaPago === frecuenciaFilter;
+      if (!matchesFrecuencia) return false;
+    }
+
+    // 4. Filtro por Producto Financiero
+    if (productoFilter !== 'todos') {
+      const matchesProducto =
+        item.loan.productoId === productoFilter ||
+        item.loan.productoNombre.toLowerCase() === productoFilter.toLowerCase();
+      if (!matchesProducto) return false;
+    }
+
+    // 5. Filtro por Pestaña
     if (activeTab === 'pendientes') {
       return (item.isToday || item.isOverdue) && item.installment.estado !== 'Pagado';
     }
@@ -155,9 +218,9 @@ export default function CollectionPage() {
   const openPaymentModal = (item: CollectionItem) => {
     setSelectedItem(item);
     const cuotaFaltante = Math.round((item.installment.cuotaTotal - item.installment.montoPagado) * 100) / 100;
-    const recargoMora = item.installment.recargoPenalizacion || item.installment.penalizacionesMora || (item.isOverdue ? 100 : 0);
+    // Cálculo dinámico de mora desde el producto real del préstamo
+    const recargoMora = getInstallmentLateFee(item.installment, item.loan, products, todayStr);
 
-    // FIX 1: Inicializar con el total sugerido (cuota + mora)
     setMontoRecibido(Math.round((cuotaFaltante + recargoMora) * 100) / 100);
     setPenalizacionCobrada(recargoMora);
     setMetodoPago('Efectivo');
@@ -179,7 +242,7 @@ export default function CollectionPage() {
       return;
     }
 
-    // 2. Validación de Cobro Extemporáneo (si está activado)
+    // 2. Validación de Cobro Extemporáneo
     if (esCobroExtemporaneo) {
       if (!fechaCobroReal || fechaCobroReal.trim() === '') {
         setFeedbackMessage('Debes indicar la fecha real en que recibiste el pago.');
@@ -277,7 +340,7 @@ export default function CollectionPage() {
     }
   };
 
-  // Manejo estricto de tecla Escape según .agents/rules/modals.md
+  // Manejo de tecla Escape según .agents/rules/modals.md
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -313,34 +376,72 @@ export default function CollectionPage() {
         </div>
       </div>
 
-      {/* Filters Toolbar */}
-      <div className="glass-panel p-4 rounded-2xl border border-slate-800 flex flex-col md:flex-row gap-3 justify-between items-center">
-        <div className="relative w-full md:w-80">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            placeholder="Buscar por Cliente o Folio..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 rounded-xl bg-slate-900/90 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500"
-          />
-        </div>
+      {/* Filters Toolbar (Dinámico: Búsqueda, Promotor, Frecuencia y Producto) */}
+      <div className="glass-panel p-4 rounded-2xl border border-slate-800 space-y-3">
+        <div className="flex flex-col md:flex-row gap-3 justify-between items-center">
+          <div className="relative w-full md:w-72">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Buscar por Cliente o Folio..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 rounded-xl bg-slate-900/90 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500"
+            />
+          </div>
 
-        <div className="flex items-center gap-2 w-full md:w-auto">
-          <Filter className="w-4 h-4 text-slate-400" />
-          <span className="text-xs text-slate-400 font-medium">Promotor:</span>
-          <select
-            value={promotorFilter}
-            onChange={(e) => setPromotorFilter(e.target.value)}
-            className="px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500 capitalize"
-          >
-            {!isPromotorUser && <option value="todos">Todos los Promotores</option>}
-            {promoterCatalog.map((p) => (
-              <option key={p.name} value={p.name}>
-                {p.name} ({p.role}) - Cobro: {p.diaCobro}
-              </option>
-            ))}
-          </select>
+          <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+            {/* Filtro Promotor */}
+            <div className="flex items-center gap-1.5 bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-800 text-xs">
+              <Filter className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              <span className="text-slate-400 font-medium">Promotor:</span>
+              <select
+                value={promotorFilter}
+                onChange={(e) => setPromotorFilter(e.target.value)}
+                className="bg-transparent text-white focus:outline-none capitalize cursor-pointer max-w-[130px] truncate"
+              >
+                {!isPromotorUser && <option value="todos" className="bg-slate-900">Todos</option>}
+                {promoterCatalog.map((p) => (
+                  <option key={p.name} value={p.name} className="bg-slate-900">
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Filtro Frecuencia */}
+            <div className="flex items-center gap-1.5 bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-800 text-xs">
+              <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              <span className="text-slate-400 font-medium">Frecuencia:</span>
+              <select
+                value={frecuenciaFilter}
+                onChange={(e) => setFrecuenciaFilter(e.target.value as 'todas' | 'diario' | 'semanal')}
+                className="bg-transparent text-white focus:outline-none cursor-pointer"
+              >
+                <option value="todas" className="bg-slate-900">Todas</option>
+                <option value="diario" className="bg-slate-900">Diario</option>
+                <option value="semanal" className="bg-slate-900">Semanal</option>
+              </select>
+            </div>
+
+            {/* Filtro Producto Financiero */}
+            <div className="flex items-center gap-1.5 bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-800 text-xs">
+              <Layers className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              <span className="text-slate-400 font-medium">Producto:</span>
+              <select
+                value={productoFilter}
+                onChange={(e) => setProductoFilter(e.target.value)}
+                className="bg-transparent text-white focus:outline-none cursor-pointer max-w-[130px] truncate"
+              >
+                <option value="todos" className="bg-slate-900">Todos</option>
+                {activeProducts.map((p) => (
+                  <option key={p.id} value={p.id} className="bg-slate-900">
+                    {p.nombre}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -491,9 +592,13 @@ export default function CollectionPage() {
         <div className="space-y-3">
           {filteredCollection.map((item, idx) => {
             const isEnRevision = item.installment.estado === 'En Revisión';
-            const recargoMoraCard = item.installment.recargoPenalizacion || item.installment.penalizacionesMora || (item.isOverdue ? 100 : 0);
+            // CÁLCULO DINÁMICO DE MORA SEGÚN EL PRODUCTO REAL
+            const recargoMoraCard = getInstallmentLateFee(item.installment, item.loan, products, todayStr);
             const cuotaFaltanteCard = Math.round((item.installment.cuotaTotal - item.installment.montoPagado) * 100) / 100;
-            const totalACobrarCard = item.isOverdue && !item.installment.recargoPenalizacion ? cuotaFaltanteCard + recargoMoraCard : cuotaFaltanteCard;
+            // FIX CRÍTICO: Sumar cuota faltante + recargo cuando está en mora
+            const totalACobrarCard = item.isOverdue && !isEnRevision
+              ? Math.round((cuotaFaltanteCard + recargoMoraCard) * 100) / 100
+              : cuotaFaltanteCard;
 
             return (
               <div
@@ -514,9 +619,15 @@ export default function CollectionPage() {
                     <p className="text-xs text-slate-400 font-mono mt-0.5">
                       Folio: {item.loan.folio} • Cuota #{item.installment.numeroCuota} de {item.loan.plazoCantidad}
                     </p>
-                    <p className="text-[11px] text-emerald-400 font-semibold mt-0.5">
-                      Promotor Asignado: {item.loan.promotorAsignado}
-                    </p>
+                    <div className="flex flex-wrap items-center gap-2 mt-1">
+                      <span className="text-[11px] text-emerald-400 font-semibold">
+                        Promotor: {item.loan.promotorAsignado}
+                      </span>
+                      <span className="text-slate-600">•</span>
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-slate-800/80 text-slate-300 font-medium capitalize border border-slate-700/50">
+                        {item.loan.productoNombre} ({item.loan.frecuenciaPago})
+                      </span>
+                    </div>
                   </div>
 
                   <InstallmentStatusBadge status={item.installment.estado} />
@@ -584,7 +695,7 @@ export default function CollectionPage() {
 
           {filteredCollection.length === 0 && (
             <div className="p-12 text-center text-slate-500 glass-panel rounded-2xl border border-slate-800">
-              No hay cobros asignados a esta ruta/promotor.
+              No hay cobros asignados con los filtros seleccionados.
             </div>
           )}
         </div>
@@ -626,8 +737,12 @@ export default function CollectionPage() {
                     <strong className="font-mono text-emerald-400">{selectedItem.loan.folio}</strong>
                   </div>
                   <div className="flex justify-between text-slate-300">
+                    <span>Producto:</span>
+                    <strong className="text-white capitalize">{selectedItem.loan.productoNombre} ({selectedItem.loan.frecuenciaPago})</strong>
+                  </div>
+                  <div className="flex justify-between text-slate-300">
                     <span>Cuota #:</span>
-                    <strong>#{selectedItem.installment.numeroCuota}</strong>
+                    <strong>#{selectedItem.installment.numeroCuota} de {selectedItem.loan.plazoCantidad}</strong>
                   </div>
                   <div className="flex justify-between text-slate-300">
                     <span>Valor Cuota Regular:</span>
@@ -635,14 +750,14 @@ export default function CollectionPage() {
                   </div>
                 </div>
 
-                {/* FIX 2: Penalización por Mora NO EDITABLE (Informativa y fija) */}
+                {/* Penalización por Mora NO EDITABLE */}
                 {selectedItem.isOverdue && !esCobroExtemporaneo && (
                   <div className="p-3 rounded-xl bg-rose-950/30 border border-rose-500/30 flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
                       <div>
                         <span className="text-xs font-bold text-rose-300 block">Recargo por Mora:</span>
-                        <span className="text-[10px] text-rose-400/80">Establecido por supervisor según contrato</span>
+                        <span className="text-[10px] text-rose-400/80">Estipulado por contrato del producto</span>
                       </div>
                     </div>
                     <strong className="text-rose-300 font-mono text-base font-black">
@@ -666,7 +781,7 @@ export default function CollectionPage() {
                   </strong>
                 </div>
 
-                {/* FIX 1: Monto Recibido Input (editable para registrar abonos o pagos completos) */}
+                {/* Monto Recibido Input */}
                 <div>
                   <label className="block text-slate-300 font-semibold mb-1">Monto Recibido ($ MXN)</label>
                   <input
@@ -684,7 +799,7 @@ export default function CollectionPage() {
                   )}
                 </div>
 
-                {/* SECCIÓN DE COBRO EXTEMPORÁNEO (SOLO SI TIENE MORA) */}
+                {/* SECCIÓN DE COBRO EXTEMPORÁNEO */}
                 {selectedItem.isOverdue && (
                   <div className="p-3.5 rounded-xl bg-slate-900/90 border border-indigo-500/40 space-y-3">
                     <label className="flex items-start gap-2.5 cursor-pointer select-none">
