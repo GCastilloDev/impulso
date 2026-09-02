@@ -121,6 +121,15 @@ model PaymentRecord {
   esAbonoParcial      Boolean  @default(false)
   nota                String?
 
+  // Control de Pagos Extemporaneos y Autorizacion
+  estatus             String    @default("Aplicado")
+  esExtemporaneo      Boolean   @default(false)
+  fechaCobroReal      DateTime?
+  motivoExtemporaneo  String?
+  autorizadoPorNombre String?
+  fechaAutorizacion   DateTime?
+  motivoRechazo       String?
+
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 }

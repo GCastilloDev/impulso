@@ -80,7 +80,7 @@ export interface Client {
   fechaRegistro: string;
 }
 
-export type EstadoCuota = 'Pendiente' | 'Pagado' | 'Mora' | 'Parcial' | 'Vencido';
+export type EstadoCuota = 'Pendiente' | 'Pagado' | 'Mora' | 'Parcial' | 'Vencido' | 'En Revisión';
 
 export interface AmortizationInstallment {
   numeroCuota: number;
@@ -130,6 +130,8 @@ export interface Loan {
   tablaAmortizacion: AmortizationInstallment[];
 }
 
+export type EstatusPago = 'Aplicado' | 'Pendiente' | 'Rechazado';
+
 export interface PaymentRecord {
   id: string;
   folioRecibo: string;
@@ -145,4 +147,12 @@ export interface PaymentRecord {
   cobradorNombre: string;
   esAbonoParcial: boolean;
   nota?: string;
+  // Control de Pagos Extemporáneos
+  estatus?: EstatusPago;
+  esExtemporaneo?: boolean;
+  fechaCobroReal?: string;
+  motivoExtemporaneo?: string;
+  autorizadoPorNombre?: string;
+  fechaAutorizacion?: string;
+  motivoRechazo?: string;
 }
