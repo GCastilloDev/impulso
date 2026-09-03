@@ -17,6 +17,7 @@ import {
   XCircle,
   FileText,
   Layers,
+  AlertCircle,
 } from 'lucide-react';
 import { useImpulsoStore } from '@/store/useImpulsoStore';
 import { InstallmentStatusBadge } from '@/components/shared/StatusBadges';
@@ -143,7 +144,8 @@ export default function CollectionPage() {
   const [motivoCausa, setMotivoCausa] = useState('Condiciones climáticas adversas / Inaccesibilidad en ruta');
   const [detallesVisita, setDetallesVisita] = useState('');
   const [isSubmittingFailedVisit, setIsSubmittingFailedVisit] = useState(false);
-  const [failedVisitFeedback, setFailedVisitFeedback] = useState<string | null>(null);
+  const [failedVisitSuccess, setFailedVisitSuccess] = useState<string | null>(null);
+  const [failedVisitError, setFailedVisitError] = useState<string | null>(null);
 
   // Arqueo y Cierre de Ruta States
   const [closurePreview, setClosurePreview] = useState<{
@@ -264,7 +266,8 @@ export default function CollectionPage() {
     setMetodoPago('Efectivo');
     setNota('');
     setEsCobroExtemporaneo(false);
-    setFechaCobroReal(item.installment.fechaVencimiento);
+    const fechaInicial = item.installment.fechaVencimiento > todayStr ? todayStr : item.installment.fechaVencimiento;
+    setFechaCobroReal(fechaInicial);
     setMotivoExtemporaneo('');
     setFeedbackMessage(null);
   };
@@ -400,7 +403,8 @@ export default function CollectionPage() {
     setFailedVisitItem(item);
     setMotivoCausa('Condiciones climáticas adversas / Inaccesibilidad en ruta');
     setDetallesVisita('');
-    setFailedVisitFeedback(null);
+    setFailedVisitSuccess(null);
+    setFailedVisitError(null);
   };
 
   const handleRegisterFailedVisit = async (e: React.FormEvent) => {
@@ -408,10 +412,11 @@ export default function CollectionPage() {
     if (!failedVisitItem || isSubmittingFailedVisit) return;
 
     if (!detallesVisita || detallesVisita.trim().length < 10) {
-      setFailedVisitFeedback('Debes detallar la causa de fuerza mayor (mínimo 10 caracteres).');
+      setFailedVisitError('Debes detallar la causa de fuerza mayor (mínimo 10 caracteres).');
       return;
     }
 
+    setFailedVisitError(null);
     setIsSubmittingFailedVisit(true);
     try {
       const res = await registerFailedVisitAction({
@@ -423,18 +428,18 @@ export default function CollectionPage() {
       });
 
       if (res.success) {
-        setFailedVisitFeedback(res.message);
+        setFailedVisitSuccess(res.message);
         await loadDataFromDB();
         setTimeout(() => {
           setFailedVisitItem(null);
-          setFailedVisitFeedback(null);
+          setFailedVisitSuccess(null);
         }, 1600);
       } else {
-        setFailedVisitFeedback(res.message || 'Error al reportar visita fallida.');
+        setFailedVisitError(res.message || 'Error al reportar visita fallida.');
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Error al procesar el reporte.';
-      setFailedVisitFeedback(message);
+      setFailedVisitError(message);
     } finally {
       setIsSubmittingFailedVisit(false);
     }
@@ -1366,29 +1371,82 @@ export default function CollectionPage() {
                     {esCobroExtemporaneo && (
                       <div className="space-y-3 pt-2 border-t border-indigo-500/20">
                         <div>
-                          <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-                            Fecha Real de Recepción del Dinero *
-                          </label>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="text-[11px] font-semibold text-slate-300">
+                              Fecha Real de Recepción del Dinero *
+                            </label>
+                            <span className="text-[10px] text-slate-400 font-mono">
+                              Máximo: Hoy ({todayStr})
+                            </span>
+                          </div>
                           <input
                             type="date"
                             max={todayStr}
                             value={fechaCobroReal}
-                            onChange={(e) => setFechaCobroReal(e.target.value)}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val > todayStr) {
+                                setFechaCobroReal(todayStr);
+                                setFeedbackMessage('La fecha real de cobro no puede ser una fecha futura.');
+                              } else {
+                                setFechaCobroReal(val);
+                                if (feedbackMessage) setFeedbackMessage(null);
+                              }
+                            }}
                             className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-indigo-500"
                           />
+                          {fechaCobroReal > todayStr && (
+                            <p className="text-[10px] text-rose-400 mt-1 font-semibold">
+                              ⚠️ No se permiten fechas futuras para cobros extemporáneos.
+                            </p>
+                          )}
                         </div>
 
                         <div>
-                          <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-                            Motivo o Justificación del Retraso *
-                          </label>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="text-[11px] font-semibold text-slate-300">
+                              Motivo o Justificación del Retraso *
+                            </label>
+                            <span
+                              className={`text-[10px] font-mono font-bold ${
+                                motivoExtemporaneo.trim().length >= 10
+                                  ? 'text-emerald-400'
+                                  : 'text-amber-400'
+                              }`}
+                            >
+                              {motivoExtemporaneo.trim().length}/10 caracteres mín.
+                            </span>
+                          </div>
                           <textarea
                             rows={2}
                             placeholder="Ej. Sin señal telefónica en comunidad rural durante la ruta..."
                             value={motivoExtemporaneo}
-                            onChange={(e) => setMotivoExtemporaneo(e.target.value)}
-                            className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-indigo-500 resize-none"
+                            onChange={(e) => {
+                              setMotivoExtemporaneo(e.target.value);
+                              if (feedbackMessage) setFeedbackMessage(null);
+                            }}
+                            className={`w-full px-3 py-2 rounded-xl bg-slate-950 border text-white text-xs focus:outline-none resize-none transition-colors ${
+                              motivoExtemporaneo.trim().length === 0
+                                ? 'border-slate-700 focus:border-indigo-500'
+                                : motivoExtemporaneo.trim().length < 10
+                                ? 'border-amber-500/60 focus:border-amber-500'
+                                : 'border-emerald-500/60 focus:border-emerald-500'
+                            }`}
                           />
+                          <p
+                            className={`text-[10px] mt-1 ${
+                              motivoExtemporaneo.trim().length >= 10
+                                ? 'text-emerald-400'
+                                : 'text-slate-400'
+                            }`}
+                          >
+                            {motivoExtemporaneo.trim().length >= 10
+                              ? '✓ Motivo suficiente para revisión del Administrador.'
+                              : `⚠️ Se requieren al menos 10 caracteres (faltan ${Math.max(
+                                  0,
+                                  10 - motivoExtemporaneo.trim().length
+                                )}).`}
+                          </p>
                         </div>
                       </div>
                     )}
@@ -1543,12 +1601,12 @@ export default function CollectionPage() {
               </button>
             </div>
 
-            {failedVisitFeedback && !isSubmittingFailedVisit ? (
+            {failedVisitSuccess ? (
               <div className="p-6 text-center space-y-3">
                 <div className="w-12 h-12 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex items-center justify-center mx-auto animate-bounce">
                   <CheckCircle2 className="w-7 h-7" />
                 </div>
-                <p className="font-extrabold text-white text-sm">{failedVisitFeedback}</p>
+                <p className="font-extrabold text-white text-sm">{failedVisitSuccess}</p>
               </div>
             ) : (
               <form onSubmit={handleRegisterFailedVisit} noValidate className="space-y-4 text-xs">
@@ -1575,6 +1633,13 @@ export default function CollectionPage() {
                     Esta opción congela la cuota en <strong>En Revisión</strong> y solicita la exención de mora al Administrador. El sistema auditará la causa reportada para autorizar que no se aplique penalización.
                   </p>
                 </div>
+
+                {failedVisitError && (
+                  <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 font-bold text-xs flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                    <span>{failedVisitError}</span>
+                  </div>
+                )}
 
                 {/* Motivo de Fuerza Mayor Tipificado */}
                 <div>
@@ -1604,21 +1669,50 @@ export default function CollectionPage() {
 
                 {/* Detalles y Justificación */}
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">
-                    Descripción / Evidencia del Hecho *
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-slate-300 font-semibold">
+                      Descripción / Evidencia del Hecho *
+                    </label>
+                    <span
+                      className={`text-[10px] font-mono font-bold ${
+                        detallesVisita.trim().length >= 10
+                          ? 'text-emerald-400'
+                          : 'text-amber-400'
+                      }`}
+                    >
+                      {detallesVisita.trim().length}/10 caracteres mín.
+                    </span>
+                  </div>
                   <textarea
                     rows={3}
                     placeholder="Describe los hechos que impidieron el cobro (ej. inundación de camino de acceso, deslave, etc.)..."
                     value={detallesVisita}
-                    onChange={(e) => setDetallesVisita(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-amber-500 resize-none"
+                    onChange={(e) => {
+                      setDetallesVisita(e.target.value);
+                      if (failedVisitError) setFailedVisitError(null);
+                    }}
+                    className={`w-full px-3 py-2 rounded-xl bg-slate-900 border text-white text-xs focus:outline-none resize-none transition-colors ${
+                      detallesVisita.trim().length === 0
+                        ? 'border-slate-700 focus:border-amber-500'
+                        : detallesVisita.trim().length < 10
+                        ? 'border-amber-500/60 focus:border-amber-500'
+                        : 'border-emerald-500/60 focus:border-emerald-500'
+                    }`}
                   />
-                  {detallesVisita.trim().length > 0 && detallesVisita.trim().length < 10 && (
-                    <p className="text-[10px] text-amber-400 mt-1">
-                      Mínimo 10 caracteres (actual: {detallesVisita.trim().length}).
-                    </p>
-                  )}
+                  <p
+                    className={`text-[10px] mt-1 ${
+                      detallesVisita.trim().length >= 10
+                        ? 'text-emerald-400'
+                        : 'text-slate-400'
+                    }`}
+                  >
+                    {detallesVisita.trim().length >= 10
+                      ? '✓ Justificación suficiente para evaluación del Administrador.'
+                      : `⚠️ Se requieren al menos 10 caracteres (faltan ${Math.max(
+                          0,
+                          10 - detallesVisita.trim().length
+                        )}).`}
+                  </p>
                 </div>
 
                 {/* Botones de acción */}
@@ -1633,7 +1727,7 @@ export default function CollectionPage() {
                   </button>
                   <button
                     type="submit"
-                    disabled={isSubmittingFailedVisit || detallesVisita.trim().length < 10}
+                    disabled={isSubmittingFailedVisit}
                     className="w-2/3 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 transition-all disabled:opacity-50"
                   >
                     {isSubmittingFailedVisit ? (
