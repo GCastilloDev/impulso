@@ -130,6 +130,10 @@ model PaymentRecord {
   fechaAutorizacion   DateTime?
   motivoRechazo       String?
 
+  // Control de Visitas Fallidas y Exención de Mora
+  esVisitaFallida     Boolean   @default(false)
+  motivoVisitaFallida String?
+
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 }

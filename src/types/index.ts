@@ -155,4 +155,7 @@ export interface PaymentRecord {
   autorizadoPorNombre?: string;
   fechaAutorizacion?: string;
   motivoRechazo?: string;
+  // Control de Visitas Fallidas y Exención de Mora
+  esVisitaFallida?: boolean;
+  motivoVisitaFallida?: string;
 }

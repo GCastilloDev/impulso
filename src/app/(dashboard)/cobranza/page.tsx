@@ -23,7 +23,7 @@ import { InstallmentStatusBadge } from '@/components/shared/StatusBadges';
 import { formatCurrency, formatDateWithDay, getTodayDateString } from '@/lib/utils';
 import { calculateLateFeeForOverduePayments } from '@/lib/financialCalculators';
 import { AmortizationInstallment, FinancialProduct, Loan, PaymentRecord } from '@/types';
-import { registerPaymentAction, authorizePaymentAction } from '@/app/actions/paymentActions';
+import { registerPaymentAction, authorizePaymentAction, registerFailedVisitAction } from '@/app/actions/paymentActions';
 
 interface CollectionItem {
   loan: Loan;
@@ -136,6 +136,13 @@ export default function CollectionPage() {
   const [motivoRechazoInput, setMotivoRechazoInput] = useState('');
   const [isAuthorizing, setIsAuthorizing] = useState(false);
   const [authFeedback, setAuthFeedback] = useState<{ id: string; message: string } | null>(null);
+
+  // Failed Visit Modal State (Fuerza Mayor)
+  const [failedVisitItem, setFailedVisitItem] = useState<CollectionItem | null>(null);
+  const [motivoCausa, setMotivoCausa] = useState('Condiciones climáticas adversas / Inaccesibilidad en ruta');
+  const [detallesVisita, setDetallesVisita] = useState('');
+  const [isSubmittingFailedVisit, setIsSubmittingFailedVisit] = useState(false);
+  const [failedVisitFeedback, setFailedVisitFeedback] = useState<string | null>(null);
 
   // Extract collection items
   const collectionList: CollectionItem[] = [];
@@ -366,17 +373,62 @@ export default function CollectionPage() {
     }
   };
 
+  const openFailedVisitModal = (item: CollectionItem) => {
+    setFailedVisitItem(item);
+    setMotivoCausa('Condiciones climáticas adversas / Inaccesibilidad en ruta');
+    setDetallesVisita('');
+    setFailedVisitFeedback(null);
+  };
+
+  const handleRegisterFailedVisit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!failedVisitItem || isSubmittingFailedVisit) return;
+
+    if (!detallesVisita || detallesVisita.trim().length < 10) {
+      setFailedVisitFeedback('Debes detallar la causa de fuerza mayor (mínimo 10 caracteres).');
+      return;
+    }
+
+    setIsSubmittingFailedVisit(true);
+    try {
+      const res = await registerFailedVisitAction({
+        prestamoId: failedVisitItem.loan.id,
+        numeroCuota: failedVisitItem.installment.numeroCuota,
+        motivoCausa,
+        detalles: detallesVisita,
+        promotorNombre: currentUser.name,
+      });
+
+      if (res.success) {
+        setFailedVisitFeedback(res.message);
+        await loadDataFromDB();
+        setTimeout(() => {
+          setFailedVisitItem(null);
+          setFailedVisitFeedback(null);
+        }, 1600);
+      } else {
+        setFailedVisitFeedback(res.message || 'Error al reportar visita fallida.');
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Error al procesar el reporte.';
+      setFailedVisitFeedback(message);
+    } finally {
+      setIsSubmittingFailedVisit(false);
+    }
+  };
+
   // Manejo de tecla Escape según .agents/rules/modals.md
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         if (selectedItem && !isSubmitting) setSelectedItem(null);
         if (rejectingPayment && !isAuthorizing) setRejectingPayment(null);
+        if (failedVisitItem && !isSubmittingFailedVisit) setFailedVisitItem(null);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedItem, isSubmitting, rejectingPayment, isAuthorizing]);
+  }, [selectedItem, isSubmitting, rejectingPayment, isAuthorizing, failedVisitItem, isSubmittingFailedVisit]);
 
   if (isPageLoading) {
     return (
@@ -534,35 +586,44 @@ export default function CollectionPage() {
             >
               <div className="flex justify-between items-start">
                 <div>
-                  <span className="text-[10px] font-mono font-bold text-amber-400 uppercase tracking-wider block">
-                    Recibo: {p.folioRecibo} • Préstamo: {p.prestamoFolio}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-mono font-bold text-amber-400 uppercase tracking-wider block">
+                      {p.folioRecibo} • Préstamo: {p.prestamoFolio}
+                    </span>
+                    {p.esVisitaFallida && (
+                      <span className="text-[10px] font-extrabold px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                        Fuerza Mayor ($0)
+                      </span>
+                    )}
+                  </div>
                   <h3 className="font-extrabold text-white text-base leading-tight mt-0.5">
                     {p.clienteNombre}
                   </h3>
                   <p className="text-xs text-slate-400 mt-0.5">
-                    Cobrado por: <strong className="text-slate-200">{p.cobradorNombre}</strong>
+                    Reportado por: <strong className="text-slate-200">{p.cobradorNombre}</strong>
                   </p>
                 </div>
 
                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
                   <Clock className="w-3.5 h-3.5 text-amber-400" />
-                  Pendiente de Aprobación
+                  {p.esVisitaFallida ? 'Exención en Revisión' : 'Pendiente de Aprobación'}
                 </span>
               </div>
 
               {/* Data comparison grid */}
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-3 rounded-xl bg-slate-900/90 border border-slate-800 text-xs">
                 <div>
-                  <span className="text-slate-400 text-[11px] block">Cuota Solicitada:</span>
+                  <span className="text-slate-400 text-[11px] block">Cuota Afectada:</span>
                   <strong className="text-white">Cuota #{p.numeroCuota}</strong>
                 </div>
                 <div>
-                  <span className="text-slate-400 text-[11px] block">Monto Cobrado:</span>
-                  <strong className="text-emerald-400 font-mono text-sm">{formatCurrency(p.montoRecibido)}</strong>
+                  <span className="text-slate-400 text-[11px] block">Monto Recaudado:</span>
+                  <strong className={`font-mono text-sm ${p.esVisitaFallida ? 'text-amber-400' : 'text-emerald-400'}`}>
+                    {p.esVisitaFallida ? '$0.00 (Visita no exitosa)' : formatCurrency(p.montoRecibido)}
+                  </strong>
                 </div>
                 <div>
-                  <span className="text-slate-400 text-[11px] block">Fecha Cobro Real:</span>
+                  <span className="text-slate-400 text-[11px] block">Fecha Reportada:</span>
                   <strong className="text-amber-300 font-semibold">{p.fechaCobroReal || p.fechaPago}</strong>
                 </div>
               </div>
@@ -570,10 +631,11 @@ export default function CollectionPage() {
               {/* Justification Box */}
               <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs space-y-1">
                 <span className="text-slate-400 font-bold text-[11px] flex items-center gap-1">
-                  <FileText className="w-3 h-3 text-amber-400" /> Justificación del Promotor:
+                  <FileText className="w-3 h-3 text-amber-400" />
+                  {p.esVisitaFallida ? 'Causa de Fuerza Mayor Reportada:' : 'Justificación del Promotor:'}
                 </span>
                 <p className="text-slate-200 italic">
-                  &ldquo;{p.motivoExtemporaneo || 'Sin motivo reportado.'}&rdquo;
+                  &ldquo;{p.motivoVisitaFallida || p.motivoExtemporaneo || p.nota || 'Sin motivo reportado.'}&rdquo;
                 </p>
               </div>
 
@@ -588,7 +650,7 @@ export default function CollectionPage() {
                     onClick={() => setRejectingPayment(p)}
                     className="flex-1 py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-rose-950/40 hover:text-rose-300 text-slate-300 border border-slate-700 font-bold text-xs transition-all disabled:opacity-50"
                   >
-                    Rechazar
+                    {p.esVisitaFallida ? 'Rechazar Exención (Aplicar Mora)' : 'Rechazar'}
                   </button>
                   <button
                     disabled={isAuthorizing}
@@ -596,11 +658,13 @@ export default function CollectionPage() {
                     className="flex-2 py-2.5 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-1.5 transition-all disabled:opacity-50"
                   >
                     {isAuthorizing ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <Loader2 className="w-4 h-4 animate-spin" />
                     ) : (
-                      <Check className="w-4 h-4 stroke-[3]" />
+                      <>
+                        <CheckCircle2 className="w-4 h-4" />
+                        {p.esVisitaFallida ? 'Autorizar Exención de Mora' : 'Aprobar Cobro'}
+                      </>
                     )}
-                    Aprobar en Fecha (Condonar Mora)
                   </button>
                 </div>
               )}
@@ -698,17 +762,28 @@ export default function CollectionPage() {
                       <Clock className="w-4 h-4 text-indigo-400" /> Solicitud en Revisión de Administrador
                     </div>
                   ) : item.installment.estado !== 'Pagado' ? (
-                    <button
-                      onClick={() => openPaymentModal(item)}
-                      className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-black text-xs shadow-lg transition-all active:scale-95 ${
-                        item.isOverdue
-                          ? 'bg-rose-500 hover:bg-rose-400 text-white shadow-rose-500/20'
-                          : 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 shadow-emerald-500/20'
-                      }`}
-                    >
-                      <DollarSign className="w-4 h-4 stroke-[3]" />
-                      Registrar Cobro ({formatCurrency(totalACobrarCard)})
-                    </button>
+                    <div className="flex-1 flex flex-col sm:flex-row gap-2">
+                      <button
+                        onClick={() => openPaymentModal(item)}
+                        className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-black text-xs shadow-lg transition-all active:scale-95 ${
+                          item.isOverdue
+                            ? 'bg-rose-500 hover:bg-rose-400 text-white shadow-rose-500/20'
+                            : 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 shadow-emerald-500/20'
+                        }`}
+                      >
+                        <DollarSign className="w-4 h-4 stroke-[3]" />
+                        Registrar Cobro ({formatCurrency(totalACobrarCard)})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openFailedVisitModal(item)}
+                        className="py-3 px-3.5 rounded-xl font-bold text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 hover:border-amber-500/50 hover:text-amber-300 transition-all flex items-center justify-center gap-1.5 shrink-0"
+                        title="Reportar visita fallida por causa de fuerza mayor"
+                      >
+                        <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                        Visita Fallida ($0)
+                      </button>
+                    </div>
                   ) : (
                     <div className="flex-1 py-2 px-3 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 text-xs font-bold text-center flex items-center justify-center gap-1.5">
                       <Check className="w-4 h-4" /> Cobro Registrado
@@ -1037,6 +1112,134 @@ export default function CollectionPage() {
                 {isAuthorizing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Confirmar Rechazo'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE REPORTE DE VISITA NO EXITOSA (FUERZA MAYOR) */}
+      {failedVisitItem && (
+        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="glass-panel w-full max-w-md p-6 rounded-2xl border border-amber-500/40 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center pb-2 border-b border-slate-800">
+              <div>
+                <span className="text-[10px] uppercase tracking-wider font-extrabold text-amber-400 block">
+                  Causa de Fuerza Mayor ($0)
+                </span>
+                <h2 className="text-base font-extrabold text-white">Reportar Visita No Exitosa</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setFailedVisitItem(null)}
+                className="p-1 text-slate-400 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            {failedVisitFeedback && !isSubmittingFailedVisit ? (
+              <div className="p-6 text-center space-y-3">
+                <div className="w-12 h-12 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex items-center justify-center mx-auto animate-bounce">
+                  <CheckCircle2 className="w-7 h-7" />
+                </div>
+                <p className="font-extrabold text-white text-sm">{failedVisitFeedback}</p>
+              </div>
+            ) : (
+              <form onSubmit={handleRegisterFailedVisit} noValidate className="space-y-4 text-xs">
+                {/* Cuota reference */}
+                <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-1">
+                  <div className="flex justify-between text-slate-300">
+                    <span>Cliente:</span>
+                    <strong className="text-white">{failedVisitItem.loan.clienteNombre}</strong>
+                  </div>
+                  <div className="flex justify-between text-slate-300">
+                    <span>Préstamo:</span>
+                    <strong className="font-mono text-emerald-400">{failedVisitItem.loan.folio}</strong>
+                  </div>
+                  <div className="flex justify-between text-slate-300">
+                    <span>Cuota #:</span>
+                    <strong>#{failedVisitItem.installment.numeroCuota} de {failedVisitItem.loan.plazoCantidad}</strong>
+                  </div>
+                </div>
+
+                {/* Explicación de regla */}
+                <div className="p-3 rounded-xl bg-amber-950/30 border border-amber-500/30 flex items-start gap-2.5">
+                  <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                  <p className="text-[11px] text-amber-200/90 leading-relaxed">
+                    Esta opción congela la cuota en <strong>En Revisión</strong> y solicita la exención de mora al Administrador. El sistema auditará la causa reportada para autorizar que no se aplique penalización.
+                  </p>
+                </div>
+
+                {/* Motivo de Fuerza Mayor Tipificado */}
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Causa Tipificada *</label>
+                  <select
+                    value={motivoCausa}
+                    onChange={(e) => setMotivoCausa(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-amber-500"
+                  >
+                    <option value="Condiciones climáticas adversas / Inaccesibilidad en ruta">
+                      Condiciones climáticas adversas / Inaccesibilidad en ruta
+                    </option>
+                    <option value="Enfermedad o urgencia médica del promotor">
+                      Enfermedad o urgencia médica del promotor
+                    </option>
+                    <option value="Causa de fuerza mayor en la comunidad / Bloqueo">
+                      Causa de fuerza mayor en la comunidad / Bloqueo
+                    </option>
+                    <option value="Cliente hospitalizado o emergencia demostrable">
+                      Cliente hospitalizado o emergencia demostrable
+                    </option>
+                    <option value="Otro impedimento justificado">
+                      Otro impedimento justificado
+                    </option>
+                  </select>
+                </div>
+
+                {/* Detalles y Justificación */}
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">
+                    Descripción / Evidencia del Hecho *
+                  </label>
+                  <textarea
+                    rows={3}
+                    placeholder="Describe los hechos que impidieron el cobro (ej. inundación de camino de acceso, deslave, etc.)..."
+                    value={detallesVisita}
+                    onChange={(e) => setDetallesVisita(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-amber-500 resize-none"
+                  />
+                  {detallesVisita.trim().length > 0 && detallesVisita.trim().length < 10 && (
+                    <p className="text-[10px] text-amber-400 mt-1">
+                      Mínimo 10 caracteres (actual: {detallesVisita.trim().length}).
+                    </p>
+                  )}
+                </div>
+
+                {/* Botones de acción */}
+                <div className="flex gap-2 pt-2">
+                  <button
+                    type="button"
+                    disabled={isSubmittingFailedVisit}
+                    onClick={() => setFailedVisitItem(null)}
+                    className="w-1/3 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs transition-all"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmittingFailedVisit || detallesVisita.trim().length < 10}
+                    className="w-2/3 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+                  >
+                    {isSubmittingFailedVisit ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" /> Registrando...
+                      </>
+                    ) : (
+                      'Enviar a Autorización'
+                    )}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}

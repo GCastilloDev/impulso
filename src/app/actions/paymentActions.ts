@@ -35,6 +35,8 @@ export async function getPaymentsAction() {
         autorizadoPorNombre: p.autorizadoPorNombre || undefined,
         fechaAutorizacion: p.fechaAutorizacion ? p.fechaAutorizacion.toISOString().split('T')[0] : undefined,
         motivoRechazo: p.motivoRechazo || undefined,
+        esVisitaFallida: p.esVisitaFallida,
+        motivoVisitaFallida: p.motivoVisitaFallida || undefined,
       })) as PaymentRecord[],
     };
   } catch (error: unknown) {
@@ -76,6 +78,8 @@ export async function getPendingPaymentsAction() {
         autorizadoPorNombre: p.autorizadoPorNombre || undefined,
         fechaAutorizacion: p.fechaAutorizacion ? p.fechaAutorizacion.toISOString().split('T')[0] : undefined,
         motivoRechazo: p.motivoRechazo || undefined,
+        esVisitaFallida: p.esVisitaFallida,
+        motivoVisitaFallida: p.motivoVisitaFallida || undefined,
       })) as PaymentRecord[],
     };
   } catch (error: unknown) {
@@ -302,6 +306,103 @@ export async function registerPaymentAction(params: {
   }
 }
 
+export async function registerFailedVisitAction(params: {
+  prestamoId: string;
+  numeroCuota: number;
+  motivoCausa: string;
+  detalles: string;
+  promotorNombre: string;
+}) {
+  try {
+    const loan = await db.loan.findUnique({
+      where: { id: params.prestamoId },
+    });
+
+    if (!loan) {
+      return { success: false, message: 'Préstamo no encontrado.' };
+    }
+
+    const count = await db.paymentRecord.count();
+    const folioRecibo = `VF-2026-${String(count + 1).padStart(3, '0')}`;
+    const tabla: AmortizationInstallment[] = Array.isArray(loan.tablaAmortizacion)
+      ? (loan.tablaAmortizacion as unknown as AmortizationInstallment[])
+      : [];
+
+    const targetCuota = tabla.find((c) => c.numeroCuota === params.numeroCuota);
+    if (!targetCuota) {
+      return { success: false, message: 'Cuota no encontrada en el préstamo.' };
+    }
+
+    const motivoCompleto = `[${params.motivoCausa}] ${params.detalles.trim()}`;
+
+    const newRecord = await db.paymentRecord.create({
+      data: {
+        folioRecibo,
+        prestamoId: loan.id,
+        prestamoFolio: loan.folio,
+        clienteId: loan.clienteId,
+        clienteNombre: loan.clienteNombre,
+        numeroCuota: params.numeroCuota,
+        montoRecibido: 0,
+        penalizacionCobrada: 0,
+        metodoPago: 'Efectivo',
+        cobradorNombre: params.promotorNombre,
+        esAbonoParcial: false,
+        nota: motivoCompleto,
+        estatus: 'Pendiente',
+        esExtemporaneo: false,
+        esVisitaFallida: true,
+        motivoVisitaFallida: motivoCompleto,
+      },
+    });
+
+    // Congelar la cuota colocándola en 'En Revisión' mientras el Administrador dictamina
+    const updatedTabla = tabla.map((cuota) => {
+      if (cuota.numeroCuota === params.numeroCuota) {
+        return {
+          ...cuota,
+          estado: 'En Revisión' as EstadoCuota,
+        };
+      }
+      return cuota;
+    });
+
+    await db.loan.update({
+      where: { id: loan.id },
+      data: {
+        tablaAmortizacion: updatedTabla as unknown as object,
+      },
+    });
+
+    return {
+      success: true,
+      message: `Reporte de visita no exitosa registrado (${folioRecibo}). Queda en revisión para autorización de exención de mora.`,
+      paymentRecord: {
+        id: newRecord.id,
+        folioRecibo: newRecord.folioRecibo,
+        prestamoId: newRecord.prestamoId,
+        prestamoFolio: newRecord.prestamoFolio,
+        clienteId: newRecord.clienteId,
+        clienteNombre: newRecord.clienteNombre,
+        numeroCuota: newRecord.numeroCuota,
+        montoRecibido: 0,
+        penalizacionCobrada: 0,
+        fechaPago: newRecord.fechaPago.toISOString().split('T')[0],
+        metodoPago: 'Efectivo',
+        cobradorNombre: newRecord.cobradorNombre,
+        esAbonoParcial: false,
+        estatus: 'Pendiente',
+        esVisitaFallida: true,
+        motivoVisitaFallida: motivoCompleto,
+      } as PaymentRecord,
+    };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Error al registrar visita fallida.';
+    console.error('Error in registerFailedVisitAction:', error);
+    return { success: false, message };
+  }
+}
+
 export async function authorizePaymentAction(params: {
   paymentId: string;
   decision: 'APROBAR' | 'RECHAZAR';
@@ -318,7 +419,7 @@ export async function authorizePaymentAction(params: {
     }
 
     if (payment.estatus !== 'Pendiente') {
-      return { success: false, message: `Este pago ya fue dictaminado previamente como ${payment.estatus}.` };
+      return { success: false, message: `Este registro ya fue dictaminado previamente como ${payment.estatus}.` };
     }
 
     const loan = await db.loan.findUnique({
@@ -351,6 +452,17 @@ export async function authorizePaymentAction(params: {
       let montoCuotaAplicado = 0;
       const updatedTabla = tabla.map((cuota) => {
         if (cuota.numeroCuota === payment.numeroCuota) {
+          if (payment.esVisitaFallida) {
+            // Exención de mora por causa de fuerza mayor: cuota retorna a Pendiente o Parcial sin mora
+            const yaTeniaAbono = cuota.montoPagado && cuota.montoPagado > 0;
+            return {
+              ...cuota,
+              estado: (yaTeniaAbono ? 'Parcial' : 'Pendiente') as EstadoCuota,
+              penalizacionesMora: 0,
+              recargoPenalizacion: 0,
+            };
+          }
+
           const montoPagadoPrevio = Math.round((cuota.montoPagado || 0) * 100) / 100;
           const remanente = Math.max(0, Math.round((cuota.cuotaTotal - montoPagadoPrevio) * 100) / 100);
           const cuotaAmortizada = Math.min(remanente, Math.max(0, Math.round((payment.montoRecibido - (payment.penalizacionCobrada || 0)) * 100) / 100));
@@ -390,9 +502,13 @@ export async function authorizePaymentAction(params: {
         },
       });
 
+      const mensaje = payment.esVisitaFallida
+        ? `Exención de mora ${payment.folioRecibo} aprobada exitosamente por causa de fuerza mayor.`
+        : `Pago extemporáneo ${payment.folioRecibo} aprobado exitosamente. La cuota quedó registrada en fecha real sin mora.`;
+
       return {
         success: true,
-        message: `Pago extemporáneo ${payment.folioRecibo} aprobado exitosamente. La cuota quedó registrada en fecha real sin mora.`,
+        message: mensaje,
       };
     } else {
       await db.paymentRecord.update({
@@ -407,10 +523,10 @@ export async function authorizePaymentAction(params: {
 
       const updatedTabla = tabla.map((cuota) => {
         if (cuota.numeroCuota === payment.numeroCuota) {
-          const yaTeniaAbono = cuota.montoPagado && cuota.montoPagado > 0;
+          // Si se rechaza la justificación de fuerza mayor, pasa a Mora
           return {
             ...cuota,
-            estado: (yaTeniaAbono ? 'Parcial' : 'Mora') as EstadoCuota,
+            estado: 'Mora' as EstadoCuota,
           };
         }
         return cuota;
@@ -419,13 +535,18 @@ export async function authorizePaymentAction(params: {
       await db.loan.update({
         where: { id: loan.id },
         data: {
+          estatus: 'En Mora',
           tablaAmortizacion: updatedTabla as unknown as object,
         },
       });
 
+      const mensaje = payment.esVisitaFallida
+        ? `Exención de mora ${payment.folioRecibo} rechazada. La cuota pasa a estado de mora con su penalización contractual.`
+        : `Pago extemporáneo ${payment.folioRecibo} rechazado. La cuota continúa en mora.`;
+
       return {
         success: true,
-        message: `Pago extemporáneo ${payment.folioRecibo} rechazado. La cuota continúa en mora.`,
+        message: mensaje,
       };
     }
   } catch (error: unknown) {
