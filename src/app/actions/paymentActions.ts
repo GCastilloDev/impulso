@@ -2,7 +2,7 @@
 
 import { unstable_noStore as noStore } from 'next/cache';
 import { db } from '@/lib/db';
-import { PaymentRecord, EstatusPago, AmortizationInstallment } from '@/types';
+import { PaymentRecord, EstatusPago, AmortizationInstallment, EstadoCuota } from '@/types';
 
 export async function getPaymentsAction() {
   noStore();
@@ -112,6 +112,46 @@ export async function registerPaymentAction(params: {
       ? (loan.tablaAmortizacion as unknown as AmortizationInstallment[])
       : [];
 
+    const targetCuota = tabla.find((c) => c.numeroCuota === params.numeroCuota);
+    if (!targetCuota) {
+      return { success: false, message: 'Cuota no encontrada en el plan de pagos del préstamo.' };
+    }
+
+    const montoPagadoPrevio = Math.round((targetCuota.montoPagado || 0) * 100) / 100;
+    const remanenteCuota = Math.max(0, Math.round((targetCuota.cuotaTotal - montoPagadoPrevio) * 100) / 100);
+
+    if (remanenteCuota <= 0) {
+      return { success: false, message: `La cuota #${params.numeroCuota} ya se encuentra totalmente liquidada.` };
+    }
+
+    const penalizacion = Math.max(0, params.penalizacionCobrada || 0);
+    const cuotaAmortizada = Math.max(0, Math.round((params.montoRecibido - penalizacion) * 100) / 100);
+
+    if (cuotaAmortizada <= 0) {
+      return { success: false, message: 'El abono ordinario a la cuota debe ser mayor a $0.' };
+    }
+
+    // Regla de Negocio: Abono mínimo de $100.00 (excepto si el remanente pendiente es menor a $100)
+    if (remanenteCuota >= 100 && cuotaAmortizada < 100) {
+      return {
+        success: false,
+        message: 'El abono mínimo permitido es de $100.00 (excepto cuando el remanente de liquidación sea menor a $100.00).',
+      };
+    }
+
+    if (cuotaAmortizada > remanenteCuota) {
+      return {
+        success: false,
+        message: `El monto ingresado excede el saldo remanente de la cuota ($${remanenteCuota.toFixed(2)}). Máximo a recibir: $${(remanenteCuota + penalizacion).toFixed(2)}.`,
+      };
+    }
+
+    const nuevoMontoPagado = Math.min(targetCuota.cuotaTotal, Math.round((montoPagadoPrevio + cuotaAmortizada) * 100) / 100);
+    const nuevoSaldoCuota = Math.max(0, Math.round((targetCuota.cuotaTotal - nuevoMontoPagado) * 100) / 100);
+    const estaLiquidada = nuevoSaldoCuota === 0;
+    const nuevoEstadoCuota: EstadoCuota = estaLiquidada ? 'Pagado' : 'Parcial';
+    const esAbonoParcial = !estaLiquidada;
+
     if (params.esExtemporaneo) {
       // 1. Registro de Pago Extemporáneo (En espera de autorización)
       const newPayment = await db.paymentRecord.create({
@@ -126,6 +166,7 @@ export async function registerPaymentAction(params: {
           penalizacionCobrada: 0,
           metodoPago: params.metodoPago,
           cobradorNombre: params.cobradorNombre,
+          esAbonoParcial: esAbonoParcial,
           nota: params.nota || null,
           estatus: 'Pendiente',
           esExtemporaneo: true,
@@ -189,9 +230,10 @@ export async function registerPaymentAction(params: {
         clienteNombre: loan.clienteNombre,
         numeroCuota: params.numeroCuota,
         montoRecibido: params.montoRecibido,
-        penalizacionCobrada: params.penalizacionCobrada,
+        penalizacionCobrada: penalizacion,
         metodoPago: params.metodoPago,
         cobradorNombre: params.cobradorNombre,
+        esAbonoParcial: esAbonoParcial,
         nota: params.nota || null,
         estatus: 'Aplicado',
       },
@@ -201,33 +243,40 @@ export async function registerPaymentAction(params: {
       if (cuota.numeroCuota === params.numeroCuota) {
         return {
           ...cuota,
-          estado: 'Pagado' as const,
-          montoPagado: params.montoRecibido,
+          estado: nuevoEstadoCuota,
+          montoPagado: nuevoMontoPagado,
+          saldoPendiente: nuevoSaldoCuota,
           fechaPago: new Date().toISOString(),
           fechaPagoReal: new Date().toISOString().split('T')[0],
-          penalizacionesMora: params.penalizacionCobrada,
+          penalizacionesMora: (cuota.penalizacionesMora || 0) + penalizacion,
         };
       }
       return cuota;
     });
 
-    const cuotaAmortizada = Math.max(0, params.montoRecibido - params.penalizacionCobrada);
-    const nuevoSaldo = Math.max(0, loan.saldoPendiente - cuotaAmortizada);
+    const nuevoSaldoLoan = Math.max(0, Math.round((loan.saldoPendiente - cuotaAmortizada) * 100) / 100);
     const todosPagados = updatedTabla.every((c) => c.estado === 'Pagado');
-    const nuevoEstatus = todosPagados ? 'Pagado' : loan.estatus;
+    const hayMoraRestante = updatedTabla.some((c) => c.estado === 'Mora' || c.estado === 'Vencido');
+    const nuevoEstatus = todosPagados
+      ? 'Pagado'
+      : (!hayMoraRestante && loan.estatus === 'En Mora' ? 'Activo' : loan.estatus);
 
     await db.loan.update({
       where: { id: loan.id },
       data: {
-        saldoPendiente: nuevoSaldo,
+        saldoPendiente: nuevoSaldoLoan,
         estatus: nuevoEstatus,
         tablaAmortizacion: updatedTabla as unknown as object,
       },
     });
 
+    const mensajeExito = esAbonoParcial
+      ? `Abono parcial registrado exitosamente (${folioRecibo}). Saldo remanente de la cuota: $${nuevoSaldoCuota.toFixed(2)}.`
+      : `Pago registrado exitosamente con recibo ${folioRecibo}. Cuota #${params.numeroCuota} liquidada.`;
+
     return {
       success: true,
-      message: `Pago registrado exitosamente con recibo ${folioRecibo}.`,
+      message: mensajeExito,
       paymentRecord: {
         id: newPayment.id,
         folioRecibo: newPayment.folioRecibo,
@@ -299,14 +348,23 @@ export async function authorizePaymentAction(params: {
         ? payment.fechaCobroReal.toISOString().split('T')[0]
         : payment.fechaPago.toISOString().split('T')[0];
 
-      let montoCuotaAplicado = payment.montoRecibido;
+      let montoCuotaAplicado = 0;
       const updatedTabla = tabla.map((cuota) => {
         if (cuota.numeroCuota === payment.numeroCuota) {
-          montoCuotaAplicado = cuota.cuotaTotal || payment.montoRecibido;
+          const montoPagadoPrevio = Math.round((cuota.montoPagado || 0) * 100) / 100;
+          const remanente = Math.max(0, Math.round((cuota.cuotaTotal - montoPagadoPrevio) * 100) / 100);
+          const cuotaAmortizada = Math.min(remanente, Math.max(0, Math.round((payment.montoRecibido - (payment.penalizacionCobrada || 0)) * 100) / 100));
+          montoCuotaAplicado = cuotaAmortizada;
+
+          const nuevoMontoPagado = Math.min(cuota.cuotaTotal, Math.round((montoPagadoPrevio + cuotaAmortizada) * 100) / 100);
+          const nuevoSaldoCuota = Math.max(0, Math.round((cuota.cuotaTotal - nuevoMontoPagado) * 100) / 100);
+          const estaLiquidada = nuevoSaldoCuota === 0;
+
           return {
             ...cuota,
-            estado: 'Pagado' as const,
-            montoPagado: payment.montoRecibido,
+            estado: (estaLiquidada ? 'Pagado' : 'Parcial') as EstadoCuota,
+            montoPagado: nuevoMontoPagado,
+            saldoPendiente: nuevoSaldoCuota,
             fechaPago: payment.fechaPago.toISOString(),
             fechaPagoReal: fechaRealStr,
             penalizacionesMora: 0,
@@ -316,9 +374,12 @@ export async function authorizePaymentAction(params: {
         return cuota;
       });
 
-      const nuevoSaldo = Math.max(0, loan.saldoPendiente - montoCuotaAplicado);
+      const nuevoSaldo = Math.max(0, Math.round((loan.saldoPendiente - montoCuotaAplicado) * 100) / 100);
       const todosPagados = updatedTabla.every((c) => c.estado === 'Pagado');
-      const nuevoEstatus = todosPagados ? 'Pagado' : loan.estatus;
+      const hayMoraRestante = updatedTabla.some((c) => c.estado === 'Mora' || c.estado === 'Vencido');
+      const nuevoEstatus = todosPagados
+        ? 'Pagado'
+        : (!hayMoraRestante && loan.estatus === 'En Mora' ? 'Activo' : loan.estatus);
 
       await db.loan.update({
         where: { id: loan.id },
@@ -346,9 +407,10 @@ export async function authorizePaymentAction(params: {
 
       const updatedTabla = tabla.map((cuota) => {
         if (cuota.numeroCuota === payment.numeroCuota) {
+          const yaTeniaAbono = cuota.montoPagado && cuota.montoPagado > 0;
           return {
             ...cuota,
-            estado: 'Mora' as const,
+            estado: (yaTeniaAbono ? 'Parcial' : 'Mora') as EstadoCuota,
           };
         }
         return cuota;

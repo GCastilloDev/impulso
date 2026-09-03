@@ -49,10 +49,15 @@ function getInstallmentLateFee(
     return installment.penalizacionesMora;
   }
 
+  // REGLA DE NEGOCIO: Cuotas en estado 'Parcial' congelan la mora sobre el remanente
+  if (installment.estado === 'Parcial') {
+    return 0;
+  }
+
   const isOverdue =
     installment.estado === 'Mora' ||
     installment.estado === 'Vencido' ||
-    ((installment.estado === 'Pendiente' || installment.estado === 'Parcial') && installment.fechaVencimiento < today);
+    (installment.estado === 'Pendiente' && installment.fechaVencimiento < today);
 
   if (!isOverdue) return 0;
 
@@ -140,18 +145,21 @@ export default function CollectionPage() {
     const assignedPromotorName = client?.promotorAsignadoNombre || loan.promotorAsignado || 'Pedro Ramírez';
 
     loan.tablaAmortizacion.forEach((installment) => {
+      const isParcial = installment.estado === 'Parcial';
       const isOverdue =
         installment.estado === 'Mora' ||
         installment.estado === 'Vencido' ||
-        ((installment.estado === 'Pendiente' || installment.estado === 'Parcial') && installment.fechaVencimiento < todayStr);
+        (installment.estado === 'Pendiente' && installment.fechaVencimiento < todayStr);
 
       const isToday = installment.fechaVencimiento === todayStr;
 
       // REGLA DE COBRANZA EN CAMPO:
       // Jamás mostrar cuotas futuras anticipadas (fechaVencimiento > todayStr)
+      // Mostrar cuotas de hoy, en mora/vencidas, con abono parcial pendiente de liquidación o pagadas hoy
       if (
         isToday ||
         isOverdue ||
+        isParcial ||
         installment.estado === 'En Revisión' ||
         (installment.estado === 'Pagado' && (installment.fechaPagoReal === todayStr || installment.fechaPago?.startsWith(todayStr)))
       ) {
@@ -162,9 +170,9 @@ export default function CollectionPage() {
           },
           installment: {
             ...installment,
-            estado: isOverdue && installment.estado !== 'En Revisión' ? 'Vencido' : installment.estado,
+            estado: isOverdue && installment.estado !== 'En Revisión' && !isParcial ? 'Vencido' : installment.estado,
           },
-          isOverdue,
+          isOverdue: isOverdue && !isParcial,
           isToday,
         });
       }
@@ -204,10 +212,10 @@ export default function CollectionPage() {
 
     // 5. Filtro por Pestaña
     if (activeTab === 'pendientes') {
-      return (item.isToday || item.isOverdue) && item.installment.estado !== 'Pagado';
+      return (item.isToday || item.isOverdue || item.installment.estado === 'Parcial') && item.installment.estado !== 'Pagado';
     }
     if (activeTab === 'mora') {
-      return item.isOverdue && item.installment.estado !== 'Pagado';
+      return item.isOverdue && item.installment.estado !== 'Pagado' && item.installment.estado !== 'Parcial';
     }
     if (activeTab === 'pagados') {
       return item.installment.estado === 'Pagado';
@@ -235,10 +243,28 @@ export default function CollectionPage() {
     e.preventDefault();
     if (!selectedItem || isSubmitting) return;
 
-    // --- VALIDACIONES SECUENCIALES VISUALES (DE ARRIBA HACIA ABAJO) ---
-    // 1. Monto Recibido
+    // 1. Monto Recibido y Reglas de Abonos Parciales
     if (!montoRecibido || Number(montoRecibido) <= 0) {
       setFeedbackMessage('El Monto Recibido es obligatorio y debe ser mayor a $0.');
+      return;
+    }
+
+    const cuotaFaltante = Math.round((selectedItem.installment.cuotaTotal - (selectedItem.installment.montoPagado || 0)) * 100) / 100;
+    const penalizacion = esCobroExtemporaneo ? 0 : Number(penalizacionCobrada);
+    const abonoOrdinario = Math.max(0, Math.round((Number(montoRecibido) - penalizacion) * 100) / 100);
+
+    if (abonoOrdinario <= 0) {
+      setFeedbackMessage('El abono ordinario a la cuota debe ser mayor a $0.');
+      return;
+    }
+
+    if (cuotaFaltante >= 100 && abonoOrdinario < 100) {
+      setFeedbackMessage('El abono mínimo permitido es de $100.00 (excepto cuando el saldo remanente sea menor a $100.00).');
+      return;
+    }
+
+    if (abonoOrdinario > cuotaFaltante) {
+      setFeedbackMessage(`El monto ingresado excede el saldo remanente de la cuota ($${cuotaFaltante.toFixed(2)}). Máximo a recaudar: $${(cuotaFaltante + penalizacion).toFixed(2)}.`);
       return;
     }
 
@@ -748,6 +774,20 @@ export default function CollectionPage() {
                     <span>Valor Cuota Regular:</span>
                     <strong className="text-white">{formatCurrency(selectedItem.installment.cuotaTotal)}</strong>
                   </div>
+                  {selectedItem.installment.montoPagado > 0 && (
+                    <>
+                      <div className="flex justify-between text-amber-400">
+                        <span>Abonado Previamente:</span>
+                        <strong className="font-mono">-{formatCurrency(selectedItem.installment.montoPagado)}</strong>
+                      </div>
+                      <div className="flex justify-between text-emerald-400 border-t border-slate-800 pt-1">
+                        <span className="font-bold">Saldo Remanente de Cuota:</span>
+                        <strong className="font-mono font-black">
+                          {formatCurrency(selectedItem.installment.cuotaTotal - selectedItem.installment.montoPagado)}
+                        </strong>
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 {/* Penalización por Mora NO EDITABLE */}
@@ -792,11 +832,24 @@ export default function CollectionPage() {
                     onChange={(e) => setMontoRecibido(Number(e.target.value))}
                     className="w-full px-4 py-3 rounded-xl bg-slate-900 border border-slate-700 text-emerald-400 font-black text-xl focus:outline-none focus:border-emerald-500"
                   />
-                  {montoRecibido < (esCobroExtemporaneo ? selectedItem.installment.cuotaTotal : selectedItem.installment.cuotaTotal + penalizacionCobrada) && (
-                    <p className="text-[11px] text-amber-400 mt-1">
-                      ⚠️ El monto ingresado es menor al total sugerido.
-                    </p>
-                  )}
+                  {(() => {
+                    const cuotaFaltante = Math.round((selectedItem.installment.cuotaTotal - (selectedItem.installment.montoPagado || 0)) * 100) / 100;
+                    const totalEsperado = esCobroExtemporaneo ? cuotaFaltante : cuotaFaltante + penalizacionCobrada;
+                    return (
+                      <div className="mt-1 space-y-0.5">
+                        <p className="text-[11px] text-slate-400">
+                          {cuotaFaltante < 100
+                            ? `💡 Saldo remanente menor a $100: abono exacto de ${formatCurrency(cuotaFaltante)} para liquidar la cuota.`
+                            : '💡 Abono mínimo permitido: $100.00 (o liquidación completa).'}
+                        </p>
+                        {montoRecibido < totalEsperado && (
+                          <p className="text-[11px] text-amber-400">
+                            ⚠️ Se registrará como abono parcial con saldo remanente (sin mora adicional a futuro).
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {/* SECCIÓN DE COBRO EXTEMPORÁNEO */}
