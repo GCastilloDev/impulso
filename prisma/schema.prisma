@@ -134,6 +134,31 @@ model PaymentRecord {
   esVisitaFallida     Boolean   @default(false)
   motivoVisitaFallida String?
 
+  // Vinculación con Cierre de Ruta / Arqueo Diario
+  cierreId            String?
+
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
+}
+
+model CashClosure {
+  id                   String   @id @default(cuid())
+  folioCierre          String   @unique
+  promotorNombre       String
+  fechaJornada         String   // YYYY-MM-DD
+  horaCorte            String   // HH:mm:ss
+  totalCobrado         Float
+  totalEfectivo        Float    @default(0)
+  totalTransferencia   Float    @default(0)
+  cantidadCobros       Int
+  folioDepositoBanco   String
+  comprobanteUrl       String?
+  nota                 String?
+  estatus              String   @default("Pendiente") // Pendiente | Conciliado | Rechazado
+  conciliadoPorNombre  String?
+  fechaConciliacion    DateTime?
+  motivoRechazo        String?
+
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 }

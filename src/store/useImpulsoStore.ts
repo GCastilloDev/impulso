@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import {
+  CashClosure,
   Client,
   FinancialProduct,
   Loan,
@@ -24,7 +25,11 @@ interface ImpulsoStoreState {
     users?: User[];
     products?: FinancialProduct[];
     payments?: PaymentRecord[];
+    closures?: CashClosure[];
   }) => void;
+
+  closures: CashClosure[];
+  setClosures: (closures: CashClosure[]) => void;
 
   users: User[];
   setUsers: (users: User[]) => void;
@@ -69,6 +74,9 @@ export const useImpulsoStore = create<ImpulsoStoreState>()((set, get) => ({
   clients: [],
   loans: [],
   payments: [],
+  closures: [],
+
+  setClosures: (closures) => set({ closures }),
 
   setCurrentUser: (user) => set({ currentUser: user, isAuthenticated: true }),
   login: (email, password) => {
@@ -106,6 +114,7 @@ export const useImpulsoStore = create<ImpulsoStoreState>()((set, get) => ({
           users: res.users,
           products: res.products,
           payments: res.payments,
+          closures: (res as any).closures || [],
         });
       }
     } finally {
@@ -120,6 +129,7 @@ export const useImpulsoStore = create<ImpulsoStoreState>()((set, get) => ({
       users: data.users ?? state.users,
       products: data.products ?? state.products,
       payments: data.payments ?? state.payments,
+      closures: data.closures ?? state.closures,
     })),
 
   setUsers: (users) => set({ users }),

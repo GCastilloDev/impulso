@@ -158,4 +158,28 @@ export interface PaymentRecord {
   // Control de Visitas Fallidas y Exención de Mora
   esVisitaFallida?: boolean;
   motivoVisitaFallida?: string;
+  // Vinculación con Arqueo y Cierre de Ruta
+  cierreId?: string;
+}
+
+export type EstatusCierre = 'Pendiente' | 'Conciliado' | 'Rechazado';
+
+export interface CashClosure {
+  id: string;
+  folioCierre: string;
+  promotorNombre: string;
+  fechaJornada: string;
+  horaCorte: string;
+  totalCobrado: number;
+  totalEfectivo: number;
+  totalTransferencia: number;
+  cantidadCobros: number;
+  folioDepositoBanco: string;
+  comprobanteUrl?: string;
+  nota?: string;
+  estatus: EstatusCierre;
+  conciliadoPorNombre?: string;
+  fechaConciliacion?: string;
+  motivoRechazo?: string;
+  createdAt: string;
 }

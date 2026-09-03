@@ -22,8 +22,9 @@ import { useImpulsoStore } from '@/store/useImpulsoStore';
 import { InstallmentStatusBadge } from '@/components/shared/StatusBadges';
 import { formatCurrency, formatDateWithDay, getTodayDateString } from '@/lib/utils';
 import { calculateLateFeeForOverduePayments } from '@/lib/financialCalculators';
-import { AmortizationInstallment, FinancialProduct, Loan, PaymentRecord } from '@/types';
+import { AmortizationInstallment, FinancialProduct, Loan, PaymentRecord, CashClosure } from '@/types';
 import { registerPaymentAction, authorizePaymentAction, registerFailedVisitAction } from '@/app/actions/paymentActions';
+import { getClosurePreviewAction, createCashClosureAction, reconcileCashClosureAction } from '@/app/actions/closureActions';
 
 interface CollectionItem {
   loan: Loan;
@@ -78,7 +79,7 @@ function getInstallmentLateFee(
 }
 
 export default function CollectionPage() {
-  const { loans, clients, users, products, payments, currentUser, loadDataFromDB } = useImpulsoStore();
+  const { loans, clients, users, products, payments, closures, currentUser, loadDataFromDB } = useImpulsoStore();
   const [isPageLoading, setIsPageLoading] = useState(true);
 
   useEffect(() => {
@@ -109,7 +110,7 @@ export default function CollectionPage() {
   // Catálogo de productos activos para filtro
   const activeProducts = products.filter((p) => p.activo && !p.eliminado);
 
-  const [activeTab, setActiveTab] = useState<'pendientes' | 'mora' | 'pagados' | 'autorizaciones'>('pendientes');
+  const [activeTab, setActiveTab] = useState<'pendientes' | 'mora' | 'pagados' | 'arqueo' | 'autorizaciones'>('pendientes');
   const [searchTerm, setSearchTerm] = useState('');
   const [promotorFilter, setPromotorFilter] = useState<string>(
     isPromotorUser ? currentUser.name : 'todos'
@@ -143,6 +144,28 @@ export default function CollectionPage() {
   const [detallesVisita, setDetallesVisita] = useState('');
   const [isSubmittingFailedVisit, setIsSubmittingFailedVisit] = useState(false);
   const [failedVisitFeedback, setFailedVisitFeedback] = useState<string | null>(null);
+
+  // Arqueo y Cierre de Ruta States
+  const [closurePreview, setClosurePreview] = useState<{
+    totalCobrado: number;
+    totalEfectivo: number;
+    totalTransferencia: number;
+    cantidadCobros: number;
+    pagosIds: string[];
+    pagosSiguienteDia: { cantidad: number; total: number };
+  } | null>(null);
+  const [isLoadingPreview, setIsLoadingPreview] = useState(false);
+  const [folioDepositoInput, setFolioDepositoInput] = useState('');
+  const [montoDepositadoInput, setMontoDepositadoInput] = useState<number | ''>('');
+  const [notaCierreInput, setNotaCierreInput] = useState('');
+  const [isSubmittingClosure, setIsSubmittingClosure] = useState(false);
+  const [closureFeedback, setClosureFeedback] = useState<string | null>(null);
+
+  // Admin Reject Closure Modal State
+  const [rejectingClosure, setRejectingClosure] = useState<CashClosure | null>(null);
+  const [motivoRechazoCierre, setMotivoRechazoCierre] = useState('');
+  const [isReconciling, setIsReconciling] = useState(false);
+  const [closureAuthFeedback, setClosureAuthFeedback] = useState<{ id: string; message: string } | null>(null);
 
   // Extract collection items
   const collectionList: CollectionItem[] = [];
@@ -417,6 +440,97 @@ export default function CollectionPage() {
     }
   };
 
+  const fetchClosurePreview = async () => {
+    setIsLoadingPreview(true);
+    try {
+      const res = await getClosurePreviewAction(currentUser.name);
+      if (res.success && res.data) {
+        setClosurePreview(res.data);
+        setMontoDepositadoInput(res.data.totalCobrado);
+      } else {
+        setClosurePreview(null);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsLoadingPreview(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'arqueo') {
+      fetchClosurePreview();
+    }
+  }, [activeTab, payments]);
+
+  const handleCreateClosure = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!closurePreview || isSubmittingClosure) return;
+
+    if (!folioDepositoInput || folioDepositoInput.trim().length < 4) {
+      setClosureFeedback('Debes ingresar el folio o comprobante bancario del depósito (mínimo 4 caracteres).');
+      return;
+    }
+
+    if (Number(montoDepositadoInput) !== closurePreview.totalCobrado) {
+      setClosureFeedback(`El depósito ($${Number(montoDepositadoInput).toFixed(2)}) debe coincidir exactamente al 100% con lo recaudado ($${closurePreview.totalCobrado.toFixed(2)}).`);
+      return;
+    }
+
+    setIsSubmittingClosure(true);
+    try {
+      const res = await createCashClosureAction({
+        promotorNombre: currentUser.name,
+        folioDepositoBanco: folioDepositoInput,
+        montoDepositado: Number(montoDepositadoInput),
+        nota: notaCierreInput,
+      });
+
+      if (res.success) {
+        setClosureFeedback(res.message);
+        setFolioDepositoInput('');
+        setNotaCierreInput('');
+        await loadDataFromDB();
+        await fetchClosurePreview();
+        setTimeout(() => setClosureFeedback(null), 3000);
+      } else {
+        setClosureFeedback(res.message || 'Error al registrar el cierre.');
+      }
+    } catch (err) {
+      setClosureFeedback('Error al procesar el cierre de ruta.');
+    } finally {
+      setIsSubmittingClosure(false);
+    }
+  };
+
+  const handleReconcileClosure = async (closureId: string, decision: 'CONCILIAR' | 'RECHAZAR', motivoRechazo?: string) => {
+    setIsReconciling(true);
+    try {
+      const res = await reconcileCashClosureAction({
+        closureId,
+        decision,
+        adminNombre: currentUser.name,
+        motivoRechazo,
+      });
+
+      if (res.success) {
+        setClosureAuthFeedback({ id: closureId, message: res.message });
+        await loadDataFromDB();
+        setTimeout(() => {
+          setClosureAuthFeedback(null);
+          setRejectingClosure(null);
+          setMotivoRechazoCierre('');
+        }, 1500);
+      } else {
+        setClosureAuthFeedback({ id: closureId, message: res.message });
+      }
+    } catch (err) {
+      setClosureAuthFeedback({ id: closureId, message: 'Error al conciliar arqueo.' });
+    } finally {
+      setIsReconciling(false);
+    }
+  };
+
   // Manejo de tecla Escape según .agents/rules/modals.md
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -424,11 +538,12 @@ export default function CollectionPage() {
         if (selectedItem && !isSubmitting) setSelectedItem(null);
         if (rejectingPayment && !isAuthorizing) setRejectingPayment(null);
         if (failedVisitItem && !isSubmittingFailedVisit) setFailedVisitItem(null);
+        if (rejectingClosure && !isReconciling) setRejectingClosure(null);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedItem, isSubmitting, rejectingPayment, isAuthorizing, failedVisitItem, isSubmittingFailedVisit]);
+  }, [selectedItem, isSubmitting, rejectingPayment, isAuthorizing, failedVisitItem, isSubmittingFailedVisit, rejectingClosure, isReconciling]);
 
   if (isPageLoading) {
     return (
@@ -558,6 +673,22 @@ export default function CollectionPage() {
           <CheckCircle2 className="w-3.5 h-3.5" /> Cobrados Hoy ({collectionList.filter(i => i.installment.estado === 'Pagado').length})
         </button>
 
+        <button
+          onClick={() => setActiveTab('arqueo')}
+          className={`flex-1 min-w-[130px] py-2.5 rounded-lg font-bold transition-all flex items-center justify-center gap-1.5 ${
+            activeTab === 'arqueo'
+              ? 'bg-teal-500 text-slate-950 shadow-md shadow-teal-500/20'
+              : 'text-teal-400 hover:text-teal-300'
+          }`}
+        >
+          <DollarSign className="w-3.5 h-3.5 stroke-[2.5]" /> Arqueo y Cierre
+          {closures.filter(c => c.estatus === 'Pendiente').length > 0 && isAdminUser && (
+            <span className="px-1.5 py-0.2 rounded-full bg-amber-500 text-slate-950 text-[10px] font-black">
+              {closures.filter(c => c.estatus === 'Pendiente').length}
+            </span>
+          )}
+        </button>
+
         {isAdminUser && (
           <button
             onClick={() => setActiveTab('autorizaciones')}
@@ -575,6 +706,282 @@ export default function CollectionPage() {
           </button>
         )}
       </div>
+
+      {/* VIEW: ARQUEO Y CIERRE DE RUTA (CORTE 16:00 HRS & CUADRE 100%) */}
+      {activeTab === 'arqueo' && (
+        <div className="space-y-6">
+          {/* Card Resumen de la Jornada Actual */}
+          <div className="glass-panel p-5 rounded-3xl border border-teal-500/30 bg-teal-950/10 space-y-4 shadow-xl">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-800">
+              <div>
+                <span className="text-[10px] font-mono font-bold text-teal-400 uppercase tracking-wider block">
+                  Jornada de Cobranza del Día
+                </span>
+                <h3 className="text-lg font-extrabold text-white mt-0.5 flex items-center gap-2">
+                  Arqueo de Ruta: <span className="text-teal-300">{currentUser.name}</span>
+                </h3>
+              </div>
+              <div className="flex items-center gap-2 bg-slate-900/90 px-3 py-1.5 rounded-xl border border-slate-800 text-xs">
+                <Clock className="w-4 h-4 text-amber-400" />
+                <span className="text-slate-300">Corte Contable:</span>
+                <strong className="text-amber-400 font-mono">16:00 hrs</strong>
+              </div>
+            </div>
+
+            {isLoadingPreview ? (
+              <div className="p-8 text-center space-y-2">
+                <Loader2 className="w-6 h-6 text-teal-400 animate-spin mx-auto" />
+                <p className="text-xs text-slate-400">Calculando arqueo en tiempo real...</p>
+              </div>
+            ) : closurePreview ? (
+              <div className="space-y-4">
+                {/* Métricas de lo recaudado */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                  <div className="p-3 rounded-2xl bg-slate-900/90 border border-slate-800">
+                    <span className="text-slate-400 text-[10px] block">Total a Depositar:</span>
+                    <strong className="text-emerald-400 font-mono text-base font-black">
+                      {formatCurrency(closurePreview.totalCobrado)}
+                    </strong>
+                  </div>
+                  <div className="p-3 rounded-2xl bg-slate-900/90 border border-slate-800">
+                    <span className="text-slate-400 text-[10px] block">Efectivo Físico:</span>
+                    <strong className="text-white font-mono text-sm">
+                      {formatCurrency(closurePreview.totalEfectivo)}
+                    </strong>
+                  </div>
+                  <div className="p-3 rounded-2xl bg-slate-900/90 border border-slate-800">
+                    <span className="text-slate-400 text-[10px] block">Transferencias:</span>
+                    <strong className="text-white font-mono text-sm">
+                      {formatCurrency(closurePreview.totalTransferencia)}
+                    </strong>
+                  </div>
+                  <div className="p-3 rounded-2xl bg-slate-900/90 border border-slate-800">
+                    <span className="text-slate-400 text-[10px] block">Cobros Realizados:</span>
+                    <strong className="text-white font-mono text-sm">
+                      {closurePreview.cantidadCobros} recibos
+                    </strong>
+                  </div>
+                </div>
+
+                {/* Alerta de cobros posteriores a las 16:00 hrs */}
+                {closurePreview.pagosSiguienteDia.cantidad > 0 && (
+                  <div className="p-3 rounded-xl bg-indigo-950/30 border border-indigo-500/30 text-xs text-indigo-300 flex items-start gap-2">
+                    <Clock className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-bold block">Regla de Corte de las 16:00 hrs aplicada:</span>
+                      <span>
+                        Tienes <strong>{closurePreview.pagosSiguienteDia.cantidad} cobro(s)</strong> registrados después de las 16:00 hrs ({formatCurrency(closurePreview.pagosSiguienteDia.total)}). Por política institucional, se acumularán automáticamente en el arqueo del siguiente día.
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Formulario de Cierre de Ruta (Promotor) */}
+                {isPromotorUser && closurePreview.cantidadCobros > 0 && (
+                  <form onSubmit={handleCreateClosure} className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-3">
+                    <h4 className="font-extrabold text-white text-xs flex items-center gap-1.5">
+                      <ShieldCheck className="w-4 h-4 text-teal-400" />
+                      Registro de Ficha de Depósito / Cierre de Ruta
+                    </h4>
+
+                    {closureFeedback && (
+                      <div className="p-3 rounded-xl bg-teal-500/10 border border-teal-500/30 text-teal-300 font-bold text-xs text-center">
+                        {closureFeedback}
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <label className="block text-slate-300 font-semibold mb-1">
+                          Folio de Depósito Bancario / Transferencia *
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="Ej. DEP-9823412 o Folio SPEI"
+                          value={folioDepositoInput}
+                          onChange={(e) => setFolioDepositoInput(e.target.value)}
+                          className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-teal-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-slate-300 font-semibold mb-1">
+                          Monto Depositado en Banco ($ MXN) *
+                        </label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          required
+                          value={montoDepositadoInput}
+                          onChange={(e) => setMontoDepositadoInput(Number(e.target.value))}
+                          className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-emerald-400 font-mono font-bold text-xs focus:outline-none focus:border-teal-500"
+                        />
+                        <span className="text-[10px] text-slate-400 mt-0.5 block">
+                          Debe coincidir exactamente con {formatCurrency(closurePreview.totalCobrado)} (100%).
+                        </span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-300 font-semibold mb-1">
+                        Notas u Observaciones del Cierre
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Ej. Sucursal bancaria Centro, depósito en ventanilla..."
+                        value={notaCierreInput}
+                        onChange={(e) => setNotaCierreInput(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-teal-500"
+                      />
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={isSubmittingClosure}
+                      className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-slate-950 font-black text-xs shadow-lg shadow-teal-500/20 flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+                    >
+                      {isSubmittingClosure ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" /> Procesando Cierre...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 className="w-4 h-4" /> Registrar Cierre de Ruta y Enviar a Conciliación ({formatCurrency(closurePreview.totalCobrado)})
+                        </>
+                      )}
+                    </button>
+                  </form>
+                )}
+              </div>
+            ) : (
+              <div className="p-6 text-center text-slate-400 text-xs">
+                No hay cobros pendientes de corte para este promotor.
+              </div>
+            )}
+          </div>
+
+          {/* Historial y Conciliación de Cierres de Ruta */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-extrabold text-white flex items-center gap-2">
+                <FileText className="w-4 h-4 text-teal-400" />
+                Historial de Cierres y Conciliación Bancaria
+              </h3>
+              <span className="text-xs text-slate-400">
+                {closures.length} corte(s) registrado(s)
+              </span>
+            </div>
+
+            {closures.map((c) => {
+              const isPendiente = c.estatus === 'Pendiente';
+              const isConciliado = c.estatus === 'Conciliado';
+              return (
+                <div
+                  key={c.id}
+                  className={`glass-panel p-4 rounded-2xl border transition-all ${
+                    isPendiente
+                      ? 'border-amber-500/40 bg-amber-950/10'
+                      : isConciliado
+                      ? 'border-emerald-500/30 bg-slate-900/60'
+                      : 'border-rose-500/30 bg-rose-950/10'
+                  }`}
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-800/80">
+                    <div>
+                      <span className="text-[10px] font-mono font-bold text-teal-400 uppercase tracking-wider block">
+                        {c.folioCierre} • Jornada: {c.fechaJornada} ({c.horaCorte} hrs)
+                      </span>
+                      <h4 className="font-extrabold text-white text-base mt-0.5">
+                        Promotor: <span className="text-slate-200">{c.promotorNombre}</span>
+                      </h4>
+                    </div>
+
+                    <span
+                      className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${
+                        isPendiente
+                          ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                          : isConciliado
+                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                          : 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                      }`}
+                    >
+                      {isPendiente && <Clock className="w-3.5 h-3.5 text-amber-400" />}
+                      {isConciliado && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />}
+                      {c.estatus}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 my-3 p-3 rounded-xl bg-slate-950/80 border border-slate-800 text-xs">
+                    <div>
+                      <span className="text-slate-400 text-[10px] block">Monto Depositado:</span>
+                      <strong className="text-emerald-400 font-mono text-sm font-black">
+                        {formatCurrency(c.totalCobrado)}
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 text-[10px] block">Folio Banco / Depósito:</span>
+                      <strong className="text-white font-mono">{c.folioDepositoBanco}</strong>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 text-[10px] block">Desglose:</span>
+                      <span className="text-slate-300">
+                        {formatCurrency(c.totalEfectivo)} efec. / {formatCurrency(c.totalTransferencia)} transf.
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 text-[10px] block">Cobros incluidos:</span>
+                      <strong className="text-white">{c.cantidadCobros} recibos</strong>
+                    </div>
+                  </div>
+
+                  {c.nota && (
+                    <p className="text-xs text-slate-300 italic mb-2">
+                      Nota: &ldquo;{c.nota}&rdquo;
+                    </p>
+                  )}
+
+                  {closureAuthFeedback?.id === c.id ? (
+                    <div className="p-3 text-center text-emerald-400 font-bold text-xs bg-emerald-500/10 rounded-xl border border-emerald-500/30 animate-pulse">
+                      {closureAuthFeedback.message}
+                    </div>
+                  ) : isAdminUser && isPendiente ? (
+                    <div className="flex gap-2 pt-1 border-t border-slate-800">
+                      <button
+                        disabled={isReconciling}
+                        onClick={() => setRejectingClosure(c)}
+                        className="flex-1 py-2 px-3 rounded-xl bg-slate-800 hover:bg-rose-950/40 hover:text-rose-300 text-slate-300 border border-slate-700 font-bold text-xs transition-all disabled:opacity-50"
+                      >
+                        Rechazar Arqueo
+                      </button>
+                      <button
+                        disabled={isReconciling}
+                        onClick={() => handleReconcileClosure(c.id, 'CONCILIAR')}
+                        className="flex-2 py-2 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-1.5 transition-all disabled:opacity-50"
+                      >
+                        {isReconciling ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <>
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            Conciliar Depósito al 100%
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+
+            {closures.length === 0 && (
+              <div className="p-8 text-center text-slate-500 glass-panel rounded-2xl border border-slate-800 text-xs">
+                Aún no hay cierres de ruta registrados en el sistema.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* VIEW: BANDEJA DE AUTORIZACIONES PENDIENTES (SOLO ADMIN) */}
       {activeTab === 'autorizaciones' && isAdminUser ? (
@@ -1240,6 +1647,61 @@ export default function CollectionPage() {
                 </div>
               </form>
             )}
+          </div>
+        </div>
+      )}
+      {/* MODAL DE RECHAZO DE ARQUEO / CIERRE (ADMIN) */}
+      {rejectingClosure && (
+        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="glass-panel w-full max-w-md p-6 rounded-2xl border border-rose-500/40 shadow-2xl space-y-4">
+            <div className="flex justify-between items-center pb-2 border-b border-slate-800">
+              <h3 className="text-base font-extrabold text-white flex items-center gap-2">
+                <XCircle className="w-5 h-5 text-rose-400" />
+                Rechazar Cierre de Ruta ({rejectingClosure.folioCierre})
+              </h3>
+              <button
+                type="button"
+                onClick={() => setRejectingClosure(null)}
+                className="text-slate-400 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="text-xs space-y-2 text-slate-300">
+              <p>
+                Al rechazar el arqueo, los cobros asociados serán liberados del cierre para que el promotor ({rejectingClosure.promotorNombre}) aclare la discrepancia bancaria.
+              </p>
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">Motivo de Discrepancia *</label>
+                <textarea
+                  rows={3}
+                  placeholder="Ej. El folio de depósito no refleja fondos en la cuenta bancaria..."
+                  value={motivoRechazoCierre}
+                  onChange={(e) => setMotivoRechazoCierre(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-rose-500 resize-none"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <button
+                type="button"
+                disabled={isReconciling}
+                onClick={() => setRejectingClosure(null)}
+                className="w-1/3 py-2.5 rounded-xl bg-slate-800 text-slate-300 font-semibold text-xs"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={isReconciling || !motivoRechazoCierre.trim()}
+                onClick={() => handleReconcileClosure(rejectingClosure.id, 'RECHAZAR', motivoRechazoCierre)}
+                className="w-2/3 py-2.5 rounded-xl bg-rose-500 hover:bg-rose-400 text-white font-bold text-xs shadow-lg shadow-rose-500/20 flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {isReconciling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Confirmar Rechazo'}
+              </button>
+            </div>
           </div>
         </div>
       )}
