@@ -41,3 +41,20 @@ Consulte la skill en `.agents/skills/atomic-commits/SKILL.md` para el procedimie
 * **`client_assignment.md`:** Restricción y asignación automática de clientes para Promotores de Campo vs Administradores.
 * **`form_validations.md`:** Validación secuencial visual de formularios de arriba hacia abajo.
 * **`financial_rules.md`:** Fórmulas financieras, cálculo de cuotas, mora y ciclo de vida de préstamos.
+
+---
+
+## 6. Hoja de Ruta y Expansiones Futuras Documentadas
+* **Soporte para Frecuencias Quincenal y Mensual:**
+  Si el cliente solicita ampliar el catálogo de frecuencias más allá de `diario` y `semanal`, los puntos de impacto identificados son:
+  1. `src/types/index.ts`: Actualizar `FrecuenciaPago = 'diario' | 'semanal' | 'quincenal' | 'mensual'`.
+  2. `src/lib/financialCalculators.ts`: En `getNextPaymentDate`, añadir caso `'quincenal'` (+14 o +15 días) y caso `'mensual'` (usando `addMonths(currentDate, 1)` de `src/lib/utils.ts`).
+  3. `src/app/(dashboard)/productos/page.tsx`: Añadir opciones en el `<select>` del formulario de producto.
+  4. `src/app/(dashboard)/cobranza/page.tsx`: Añadir opciones en el filtro de frecuencias de cobranza.
+  5. `src/lib/utils.ts`: Evaluar lógica de alineación de primera cuota según calendario (días 15/30 o días específicos).
+
+* **Puntos de Negocio en Espera de Respuesta del Cliente:**
+  1. Aceptación o prohibición estricta de abonos parciales a cuotas.
+  2. Mecánica de corte de caja semanal y pago de comisiones a promotores.
+  3. Registro de visitas en campo no exitosas (sin cobro).
+
