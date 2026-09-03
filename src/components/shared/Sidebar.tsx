@@ -56,6 +56,11 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       href: '/clientes',
       icon: Users,
     },
+    {
+      name: 'Comisiones Semanales',
+      href: '/comisiones',
+      icon: TrendingUp,
+    },
     ...(isAdmin
       ? [
           {
