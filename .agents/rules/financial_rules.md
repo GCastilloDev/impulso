@@ -41,3 +41,50 @@
 2. **Trazabilidad Obligatoria:**
    * Todo préstamo debe registrar quién lo solicitó (`solicitadoPorNombre`, `solicitadoPorRol`, `fechaHoraSolicitud`) y quién lo aprobó (`aprobadoPorNombre`, `fechaHoraAprobacion`).
    * La reasignación de promotores en créditos activos o solicitudes es competencia exclusiva del rol **Administrador**.
+
+---
+
+## 4. Política de Abonos Parciales
+1. **Monto Mínimo de Abono:**
+   * El monto mínimo para registrar un abono parcial es de **$100.00**.
+   * **Excepción de Liquidación de Remanente:** Se permiten montos inferiores a $100.00 (ej. $10, $20, $30, $50) **únicamente** cuando el saldo remanente pendiente de la cuota sea menor a $100.00, permitiendo al cliente liquidar la cuota con el monto exacto restante.
+2. **Tratamiento del Remanente y Mora:**
+   * Al registrar un abono parcial, la cuota pasa a estado `Parcial`.
+   * El saldo remanente pendiente **no genera mora acumulativa** en las fechas subsecuentes; dicho saldo se liquida en el siguiente pago o al final del crédito.
+
+---
+
+## 5. Cierres de Ruta y Arqueo Diario de Cobranza
+1. **Horario Límite de Corte (16:00 hrs):**
+   * La jornada de cobranza del día concluye a las **16:00 horas**.
+   * Todo cobro ingresado en el sistema a partir de las **16:00:01 hrs** se computa y acumula automáticamente en el arqueo del siguiente día hábil.
+2. **Cuadre Íntegro Obligatorio (100%):**
+   * El promotor debe reportar ficha o folio de depósito/transferencia bancaria por el **100% exacto** de lo recaudado en su jornada. No se permiten cierres parciales ni montos discrepantes.
+3. **Conciliación:**
+   * El depósito queda registrado en el módulo de arqueo para su cotejo y validación por parte del Administrador.
+
+---
+
+## 6. Cálculo de Comisiones Semanales a Promotores
+1. **Base Comisionable:**
+   * La comisión se calcula exclusivamente sobre la cobranza ordinaria (monto de cuota cobrado). La mora recaudada **no genera comisión** para evitar incentivos perversos.
+2. **Criterio de Escalón:**
+   * Por regla general, el escalón porcentual se determina con base en el **total de clientes activos asignados** en la cartera del promotor.
+   * El panel de administración debe contar con la opción manual/configurable para calcularlo por clientes efectivamente cobrados si el Administrador lo determina.
+3. **Tabulador de Comisiones:**
+   * **0 a 19 clientes:** 5%
+   * **20 a 29 clientes:** 6%
+   * **30 a 49 clientes:** 7%
+   * **50 a 69 clientes:** 8%
+   * **70 a 89 clientes:** 9%
+   * **90 o más clientes:** 10%
+
+---
+
+## 7. Visitas en Campo No Exitosas y Exención de Mora
+1. **Registro de Visita Fallida:**
+   * Si el promotor no puede cobrar por causa de fuerza mayor (condiciones climáticas, enfermedad comprobable, etc.), registra la visita con importe $0 y motivo tipificado.
+2. **Bandeja de Autorización:**
+   * La solicitud de exención de mora entra a la bandeja en estado `en_revision`.
+3. **Dictamen de Administrador:**
+   * El Administrador aprueba (condona la mora de esa cuota) o rechaza (aplica la mora regular del producto).

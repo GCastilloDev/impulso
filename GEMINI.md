@@ -53,8 +53,13 @@ Consulte la skill en `.agents/skills/atomic-commits/SKILL.md` para el procedimie
   4. `src/app/(dashboard)/cobranza/page.tsx`: Añadir opciones en el filtro de frecuencias de cobranza.
   5. `src/lib/utils.ts`: Evaluar lógica de alineación de primera cuota según calendario (días 15/30 o días específicos).
 
-* **Puntos de Negocio en Espera de Respuesta del Cliente:**
-  1. Aceptación o prohibición estricta de abonos parciales a cuotas.
-  2. Mecánica de corte de caja semanal y pago de comisiones a promotores.
-  3. Registro de visitas en campo no exitosas (sin cobro).
+* **Reglas de Negocio Validadas con el Cliente:**
+  1. **Abonos Parciales:** Mínimo de $100.00 (excepto remanente menor a $100 para liquidación). Estado `Parcial` y congelamiento de mora en el remanente.
+  2. **Cierre de Ruta y Arqueo (16:00 hrs):** Cobros después de las 16:00 pasan al siguiente día. Cuadre estricto al 100% con comprobante.
+  3. **Comisiones Semanales (Tabulador 5%-10%):** Sobre cobranza ordinaria (sin mora). Escalón por cartera asignada total por defecto, con ajuste manual/configurable por cobrados.
+  4. **Visitas Fallidas:** Registro con causa de fuerza mayor ($0) pasa a autorización de admin para exención de mora.
+
+* **Configuración Dinámica Futura (Roadmap):**
+  1. Horario límite de corte configurable por Administrador (por defecto 16:00 hrs).
+  2. Tabulador dinámico de comisiones editable desde el panel de administración (rangos de clientes y porcentajes).
 
