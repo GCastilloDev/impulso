@@ -287,20 +287,19 @@ export default function CollectionPage() {
     const errors: { montoRecibido?: string; fechaCobroReal?: string; motivoExtemporaneo?: string; general?: string } = {};
 
     // 1. Validación de Monto Recibido y Reglas de Abonos Parciales (Orden visual de arriba a abajo)
+    const cuotaFaltante = Math.round((selectedItem.installment.cuotaTotal - (selectedItem.installment.montoPagado || 0)) * 100) / 100;
+    const penalizacion = esCobroExtemporaneo ? 0 : Number(penalizacionCobrada);
+    const totalEsperado = Math.round((cuotaFaltante + penalizacion) * 100) / 100;
+    const abonoOrdinario = Math.max(0, Math.round((Number(montoRecibido) - penalizacion) * 100) / 100);
+
     if (!montoRecibido || Number(montoRecibido) <= 0) {
       errors.montoRecibido = 'El monto recibido es obligatorio y debe ser mayor a $0.';
-    } else {
-      const cuotaFaltante = Math.round((selectedItem.installment.cuotaTotal - (selectedItem.installment.montoPagado || 0)) * 100) / 100;
-      const penalizacion = esCobroExtemporaneo ? 0 : Number(penalizacionCobrada);
-      const abonoOrdinario = Math.max(0, Math.round((Number(montoRecibido) - penalizacion) * 100) / 100);
-
-      if (abonoOrdinario <= 0) {
-        errors.montoRecibido = 'El abono ordinario a la cuota debe ser mayor a $0.';
-      } else if (cuotaFaltante >= 100 && abonoOrdinario < 100) {
-        errors.montoRecibido = 'El abono mínimo permitido es de $100.00 (excepto cuando el remanente sea menor a $100.00).';
-      } else if (abonoOrdinario > cuotaFaltante) {
-        errors.montoRecibido = `El monto excede el saldo de la cuota ($${cuotaFaltante.toFixed(2)}). Máximo a recaudar: $${(cuotaFaltante + penalizacion).toFixed(2)}.`;
-      }
+    } else if (Number(montoRecibido) > totalEsperado) {
+      errors.montoRecibido = `El monto excede el total a recaudar ($${totalEsperado.toFixed(2)}).`;
+    } else if (totalEsperado >= 100 && Number(montoRecibido) < 100) {
+      errors.montoRecibido = 'El abono mínimo permitido es de $100.00 (excepto cuando el saldo para liquidar sea menor a $100.00).';
+    } else if (penalizacion > 0 && abonoOrdinario <= 0) {
+      errors.montoRecibido = `El monto debe ser mayor a la penalización por mora ($${penalizacion.toFixed(2)}) para amortizar la cuota.`;
     }
 
     // 2. Validación de Cobro Extemporáneo
@@ -1351,8 +1350,8 @@ export default function CollectionPage() {
                     return (
                       <div className="mt-1 space-y-0.5">
                         <p className="text-[11px] text-slate-400">
-                          {cuotaFaltante < 100
-                            ? `💡 Saldo remanente menor a $100: abono exacto de ${formatCurrency(cuotaFaltante)} para liquidar la cuota.`
+                          {totalEsperado < 100
+                            ? `💡 Saldo restante menor a $100: abono exacto de ${formatCurrency(totalEsperado)} para liquidar la cuota.`
                             : '💡 Abono mínimo permitido: $100.00 (o liquidación completa).'}
                         </p>
                         {montoRecibido < totalEsperado && (

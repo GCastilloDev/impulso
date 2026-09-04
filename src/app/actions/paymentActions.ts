@@ -129,24 +129,28 @@ export async function registerPaymentAction(params: {
     }
 
     const penalizacion = Math.max(0, params.penalizacionCobrada || 0);
+    const totalAdeudado = Math.round((remanenteCuota + penalizacion) * 100) / 100;
     const cuotaAmortizada = Math.max(0, Math.round((params.montoRecibido - penalizacion) * 100) / 100);
 
-    if (cuotaAmortizada <= 0) {
-      return { success: false, message: 'El abono ordinario a la cuota debe ser mayor a $0.' };
+    if (params.montoRecibido > totalAdeudado) {
+      return {
+        success: false,
+        message: `El monto ingresado excede el saldo total de la cuota ($${totalAdeudado.toFixed(2)}). Máximo a recibir: $${totalAdeudado.toFixed(2)}.`,
+      };
     }
 
-    // Regla de Negocio: Abono mínimo de $100.00 (excepto si el remanente pendiente es menor a $100)
-    if (remanenteCuota >= 100 && cuotaAmortizada < 100) {
+    // Regla de Negocio: Abono mínimo de $100.00 (excepto si el total adeudado para liquidar es menor a $100)
+    if (totalAdeudado >= 100 && params.montoRecibido < 100) {
       return {
         success: false,
         message: 'El abono mínimo permitido es de $100.00 (excepto cuando el remanente de liquidación sea menor a $100.00).',
       };
     }
 
-    if (cuotaAmortizada > remanenteCuota) {
+    if (penalizacion > 0 && cuotaAmortizada <= 0) {
       return {
         success: false,
-        message: `El monto ingresado excede el saldo remanente de la cuota ($${remanenteCuota.toFixed(2)}). Máximo a recibir: $${(remanenteCuota + penalizacion).toFixed(2)}.`,
+        message: `El monto debe ser mayor a la penalización por mora ($${penalizacion.toFixed(2)}) para amortizar la cuota.`,
       };
     }
 
