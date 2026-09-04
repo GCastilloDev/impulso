@@ -125,7 +125,13 @@ export default function CollectionPage() {
   const [penalizacionCobrada, setPenalizacionCobrada] = useState<number>(0);
   const [metodoPago, setMetodoPago] = useState<'Efectivo' | 'Transferencia' | 'Tarjeta'>('Efectivo');
   const [nota, setNota] = useState('');
-  const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
+  const [paymentSuccessMessage, setPaymentSuccessMessage] = useState<string | null>(null);
+  const [paymentFormErrors, setPaymentFormErrors] = useState<{
+    montoRecibido?: string;
+    fechaCobroReal?: string;
+    motivoExtemporaneo?: string;
+    general?: string;
+  }>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Extemporaneous Payment Fields
@@ -145,7 +151,7 @@ export default function CollectionPage() {
   const [detallesVisita, setDetallesVisita] = useState('');
   const [isSubmittingFailedVisit, setIsSubmittingFailedVisit] = useState(false);
   const [failedVisitSuccess, setFailedVisitSuccess] = useState<string | null>(null);
-  const [failedVisitError, setFailedVisitError] = useState<string | null>(null);
+  const [failedVisitErrors, setFailedVisitErrors] = useState<{ detallesVisita?: string; general?: string }>({});
 
   // Arqueo y Cierre de Ruta States
   const [closurePreview, setClosurePreview] = useState<{
@@ -266,57 +272,61 @@ export default function CollectionPage() {
     setMetodoPago('Efectivo');
     setNota('');
     setEsCobroExtemporaneo(false);
-    const fechaInicial = item.installment.fechaVencimiento > todayStr ? todayStr : item.installment.fechaVencimiento;
-    setFechaCobroReal(fechaInicial);
+    // Para cobro extemporáneo, el límite es el vencimiento o hoy (el menor)
+    const maxFecha = item.installment.fechaVencimiento <= todayStr ? item.installment.fechaVencimiento : todayStr;
+    setFechaCobroReal(maxFecha);
     setMotivoExtemporaneo('');
-    setFeedbackMessage(null);
+    setPaymentSuccessMessage(null);
+    setPaymentFormErrors({});
   };
 
   const handleRegisterPayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedItem || isSubmitting) return;
 
-    // 1. Monto Recibido y Reglas de Abonos Parciales
+    const errors: { montoRecibido?: string; fechaCobroReal?: string; motivoExtemporaneo?: string; general?: string } = {};
+
+    // 1. Validación de Monto Recibido y Reglas de Abonos Parciales (Orden visual de arriba a abajo)
     if (!montoRecibido || Number(montoRecibido) <= 0) {
-      setFeedbackMessage('El Monto Recibido es obligatorio y debe ser mayor a $0.');
-      return;
-    }
+      errors.montoRecibido = 'El monto recibido es obligatorio y debe ser mayor a $0.';
+    } else {
+      const cuotaFaltante = Math.round((selectedItem.installment.cuotaTotal - (selectedItem.installment.montoPagado || 0)) * 100) / 100;
+      const penalizacion = esCobroExtemporaneo ? 0 : Number(penalizacionCobrada);
+      const abonoOrdinario = Math.max(0, Math.round((Number(montoRecibido) - penalizacion) * 100) / 100);
 
-    const cuotaFaltante = Math.round((selectedItem.installment.cuotaTotal - (selectedItem.installment.montoPagado || 0)) * 100) / 100;
-    const penalizacion = esCobroExtemporaneo ? 0 : Number(penalizacionCobrada);
-    const abonoOrdinario = Math.max(0, Math.round((Number(montoRecibido) - penalizacion) * 100) / 100);
-
-    if (abonoOrdinario <= 0) {
-      setFeedbackMessage('El abono ordinario a la cuota debe ser mayor a $0.');
-      return;
-    }
-
-    if (cuotaFaltante >= 100 && abonoOrdinario < 100) {
-      setFeedbackMessage('El abono mínimo permitido es de $100.00 (excepto cuando el saldo remanente sea menor a $100.00).');
-      return;
-    }
-
-    if (abonoOrdinario > cuotaFaltante) {
-      setFeedbackMessage(`El monto ingresado excede el saldo remanente de la cuota ($${cuotaFaltante.toFixed(2)}). Máximo a recaudar: $${(cuotaFaltante + penalizacion).toFixed(2)}.`);
-      return;
+      if (abonoOrdinario <= 0) {
+        errors.montoRecibido = 'El abono ordinario a la cuota debe ser mayor a $0.';
+      } else if (cuotaFaltante >= 100 && abonoOrdinario < 100) {
+        errors.montoRecibido = 'El abono mínimo permitido es de $100.00 (excepto cuando el remanente sea menor a $100.00).';
+      } else if (abonoOrdinario > cuotaFaltante) {
+        errors.montoRecibido = `El monto excede el saldo de la cuota ($${cuotaFaltante.toFixed(2)}). Máximo a recaudar: $${(cuotaFaltante + penalizacion).toFixed(2)}.`;
+      }
     }
 
     // 2. Validación de Cobro Extemporáneo
     if (esCobroExtemporaneo) {
+      const maxExtemporaneousDate = selectedItem.installment.fechaVencimiento <= todayStr
+        ? selectedItem.installment.fechaVencimiento
+        : todayStr;
+
       if (!fechaCobroReal || fechaCobroReal.trim() === '') {
-        setFeedbackMessage('Debes indicar la fecha real en que recibiste el pago.');
-        return;
+        errors.fechaCobroReal = 'Debes seleccionar la fecha real en que recibiste el dinero mediante el calendario.';
+      } else if (fechaCobroReal > maxExtemporaneousDate) {
+        errors.fechaCobroReal = `La fecha real no puede ser posterior a ${maxExtemporaneousDate}.`;
       }
-      if (fechaCobroReal > todayStr) {
-        setFeedbackMessage('La fecha de cobro real no puede ser una fecha futura.');
-        return;
-      }
-      if (!motivoExtemporaneo || motivoExtemporaneo.trim().length < 8) {
-        setFeedbackMessage('El motivo o justificación del cobro extemporáneo es obligatorio (mínimo 8 caracteres).');
-        return;
+
+      if (!motivoExtemporaneo || motivoExtemporaneo.trim().length < 10) {
+        errors.motivoExtemporaneo = 'Debes detallar la justificación del cobro extemporáneo (mínimo 10 caracteres).';
       }
     }
 
+    // Si existen errores, no enviamos al backend y se resaltan los inputs visualmente
+    if (Object.keys(errors).length > 0) {
+      setPaymentFormErrors(errors);
+      return;
+    }
+
+    setPaymentFormErrors({});
     setIsSubmitting(true);
     try {
       const result = await registerPaymentAction({
@@ -333,7 +343,7 @@ export default function CollectionPage() {
       });
 
       if (result.success) {
-        setFeedbackMessage(result.message);
+        setPaymentSuccessMessage(result.message);
         await loadDataFromDB();
 
         if (!esCobroExtemporaneo) {
@@ -346,14 +356,14 @@ export default function CollectionPage() {
 
         setTimeout(() => {
           setSelectedItem(null);
-          setFeedbackMessage(null);
+          setPaymentSuccessMessage(null);
         }, 1500);
       } else {
-        setFeedbackMessage(result.message || 'Error al registrar el pago.');
+        setPaymentFormErrors({ general: result.message || 'Error al registrar el pago.' });
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Error al procesar el pago.';
-      setFeedbackMessage(message);
+      setPaymentFormErrors({ general: message });
     } finally {
       setIsSubmitting(false);
     }
@@ -404,7 +414,7 @@ export default function CollectionPage() {
     setMotivoCausa('Condiciones climáticas adversas / Inaccesibilidad en ruta');
     setDetallesVisita('');
     setFailedVisitSuccess(null);
-    setFailedVisitError(null);
+    setFailedVisitErrors({});
   };
 
   const handleRegisterFailedVisit = async (e: React.FormEvent) => {
@@ -412,11 +422,13 @@ export default function CollectionPage() {
     if (!failedVisitItem || isSubmittingFailedVisit) return;
 
     if (!detallesVisita || detallesVisita.trim().length < 10) {
-      setFailedVisitError('Debes detallar la causa de fuerza mayor (mínimo 10 caracteres).');
+      setFailedVisitErrors({
+        detallesVisita: 'Debes detallar la causa de fuerza mayor (mínimo 10 caracteres).',
+      });
       return;
     }
 
-    setFailedVisitError(null);
+    setFailedVisitErrors({});
     setIsSubmittingFailedVisit(true);
     try {
       const res = await registerFailedVisitAction({
@@ -435,11 +447,11 @@ export default function CollectionPage() {
           setFailedVisitSuccess(null);
         }, 1600);
       } else {
-        setFailedVisitError(res.message || 'Error al reportar visita fallida.');
+        setFailedVisitErrors({ general: res.message || 'Error al reportar visita fallida.' });
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Error al procesar el reporte.';
-      setFailedVisitError(message);
+      setFailedVisitErrors({ general: message });
     } finally {
       setIsSubmittingFailedVisit(false);
     }
@@ -1234,12 +1246,12 @@ export default function CollectionPage() {
               </button>
             </div>
 
-            {feedbackMessage && !isSubmitting ? (
+            {paymentSuccessMessage ? (
               <div className="p-6 text-center space-y-3">
                 <div className="w-12 h-12 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex items-center justify-center mx-auto animate-bounce">
                   <CheckCircle2 className="w-7 h-7" />
                 </div>
-                <p className="font-extrabold text-white text-base">{feedbackMessage}</p>
+                <p className="font-extrabold text-white text-base">{paymentSuccessMessage}</p>
               </div>
             ) : (
               <form onSubmit={handleRegisterPayment} noValidate className="space-y-4 text-xs">
@@ -1310,15 +1322,33 @@ export default function CollectionPage() {
 
                 {/* Monto Recibido Input */}
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Monto Recibido ($ MXN)</label>
+                  <label className="block text-slate-300 font-semibold mb-1">Monto Recibido ($ MXN) *</label>
                   <input
                     type="number"
                     step="0.01"
                     required
                     value={montoRecibido}
-                    onChange={(e) => setMontoRecibido(Number(e.target.value))}
-                    className="w-full px-4 py-3 rounded-xl bg-slate-900 border border-slate-700 text-emerald-400 font-black text-xl focus:outline-none focus:border-emerald-500"
+                    onChange={(e) => {
+                      setMontoRecibido(Number(e.target.value));
+                      setPaymentFormErrors((prev) => {
+                        const next = { ...prev };
+                        delete next.montoRecibido;
+                        delete next.general;
+                        return next;
+                      });
+                    }}
+                    className={`w-full px-4 py-3 rounded-xl bg-slate-900 border text-emerald-400 font-black text-xl focus:outline-none transition-colors ${
+                      paymentFormErrors.montoRecibido
+                        ? 'border-rose-500 ring-1 ring-rose-500'
+                        : 'border-slate-700 focus:border-emerald-500'
+                    }`}
                   />
+                  {paymentFormErrors.montoRecibido && (
+                    <p className="text-xs text-rose-400 font-semibold mt-1 flex items-center gap-1">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                      {paymentFormErrors.montoRecibido}
+                    </p>
+                  )}
                   {(() => {
                     const cuotaFaltante = Math.round((selectedItem.installment.cuotaTotal - (selectedItem.installment.montoPagado || 0)) * 100) / 100;
                     const totalEsperado = esCobroExtemporaneo ? cuotaFaltante : cuotaFaltante + penalizacionCobrada;
@@ -1352,9 +1382,14 @@ export default function CollectionPage() {
                           const cuotaFaltante = Math.round((selectedItem.installment.cuotaTotal - selectedItem.installment.montoPagado) * 100) / 100;
                           if (checked) {
                             setMontoRecibido(cuotaFaltante);
+                            const maxExtemporaneousDate = selectedItem.installment.fechaVencimiento <= todayStr
+                              ? selectedItem.installment.fechaVencimiento
+                              : todayStr;
+                            setFechaCobroReal(maxExtemporaneousDate);
                           } else {
                             setMontoRecibido(Math.round((cuotaFaltante + penalizacionCobrada) * 100) / 100);
                           }
+                          setPaymentFormErrors({});
                         }}
                         className="mt-0.5 w-4 h-4 rounded text-indigo-500 bg-slate-800 border-slate-700 focus:ring-indigo-500"
                       />
@@ -1368,88 +1403,143 @@ export default function CollectionPage() {
                       </div>
                     </label>
 
-                    {esCobroExtemporaneo && (
-                      <div className="space-y-3 pt-2 border-t border-indigo-500/20">
-                        <div>
-                          <div className="flex items-center justify-between mb-1">
-                            <label className="text-[11px] font-semibold text-slate-300">
-                              Fecha Real de Recepción del Dinero *
-                            </label>
-                            <span className="text-[10px] text-slate-400 font-mono">
-                              Máximo: Hoy ({todayStr})
-                            </span>
-                          </div>
-                          <input
-                            type="date"
-                            max={todayStr}
-                            value={fechaCobroReal}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              if (val > todayStr) {
-                                setFechaCobroReal(todayStr);
-                                setFeedbackMessage('La fecha real de cobro no puede ser una fecha futura.');
-                              } else {
-                                setFechaCobroReal(val);
-                                if (feedbackMessage) setFeedbackMessage(null);
-                              }
-                            }}
-                            className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-indigo-500"
-                          />
-                          {fechaCobroReal > todayStr && (
-                            <p className="text-[10px] text-rose-400 mt-1 font-semibold">
-                              ⚠️ No se permiten fechas futuras para cobros extemporáneos.
-                            </p>
-                          )}
-                        </div>
+                    {esCobroExtemporaneo && (() => {
+                      const maxExtemporaneousDate = selectedItem.installment.fechaVencimiento <= todayStr
+                        ? selectedItem.installment.fechaVencimiento
+                        : todayStr;
 
-                        <div>
-                          <div className="flex items-center justify-between mb-1">
-                            <label className="text-[11px] font-semibold text-slate-300">
-                              Motivo o Justificación del Retraso *
-                            </label>
-                            <span
-                              className={`text-[10px] font-mono font-bold ${
-                                motivoExtemporaneo.trim().length >= 10
-                                  ? 'text-emerald-400'
-                                  : 'text-amber-400'
+                      return (
+                        <div className="space-y-3 pt-2 border-t border-indigo-500/20">
+                          <div>
+                            <div className="flex items-center justify-between mb-1">
+                              <label className="text-[11px] font-semibold text-slate-300">
+                                Fecha Real de Recepción del Dinero *
+                              </label>
+                              <span className="text-[10px] text-slate-400 font-mono">
+                                Límite: {maxExtemporaneousDate}
+                              </span>
+                            </div>
+                            <input
+                              type="date"
+                              max={maxExtemporaneousDate}
+                              min={selectedItem.loan.fechaInicio || undefined}
+                              value={fechaCobroReal}
+                              onKeyDown={(e) => e.preventDefault()}
+                              onClick={(e) => {
+                                try {
+                                  (e.currentTarget as HTMLInputElement).showPicker?.();
+                                } catch {}
+                              }}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                if (!val) {
+                                  setFechaCobroReal('');
+                                  setPaymentFormErrors((prev) => ({
+                                    ...prev,
+                                    fechaCobroReal: 'Debes seleccionar la fecha real mediante el calendario.',
+                                  }));
+                                  return;
+                                }
+                                if (val > maxExtemporaneousDate) {
+                                  setFechaCobroReal(maxExtemporaneousDate);
+                                  setPaymentFormErrors((prev) => ({
+                                    ...prev,
+                                    fechaCobroReal: `La fecha real no puede ser posterior a ${maxExtemporaneousDate}.`,
+                                  }));
+                                } else {
+                                  setFechaCobroReal(val);
+                                  setPaymentFormErrors((prev) => {
+                                    const next = { ...prev };
+                                    delete next.fechaCobroReal;
+                                    return next;
+                                  });
+                                }
+                              }}
+                              className={`w-full px-3 py-2 rounded-xl bg-slate-950 border text-white text-xs focus:outline-none cursor-pointer transition-colors ${
+                                paymentFormErrors.fechaCobroReal
+                                  ? 'border-rose-500 ring-1 ring-rose-500'
+                                  : 'border-slate-700 focus:border-indigo-500'
                               }`}
-                            >
-                              {motivoExtemporaneo.trim().length}/10 caracteres mín.
-                            </span>
+                            />
+                            {paymentFormErrors.fechaCobroReal ? (
+                              <p className="text-[10px] text-rose-400 font-semibold mt-1 flex items-center gap-1">
+                                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                                {paymentFormErrors.fechaCobroReal}
+                              </p>
+                            ) : (
+                              <p className="text-[10px] text-slate-400 mt-1">
+                                📅 Solo seleccionable mediante el calendario (fechas posteriores bloqueadas).
+                              </p>
+                            )}
                           </div>
-                          <textarea
-                            rows={2}
-                            placeholder="Ej. Sin señal telefónica en comunidad rural durante la ruta..."
-                            value={motivoExtemporaneo}
-                            onChange={(e) => {
-                              setMotivoExtemporaneo(e.target.value);
-                              if (feedbackMessage) setFeedbackMessage(null);
-                            }}
-                            className={`w-full px-3 py-2 rounded-xl bg-slate-950 border text-white text-xs focus:outline-none resize-none transition-colors ${
-                              motivoExtemporaneo.trim().length === 0
-                                ? 'border-slate-700 focus:border-indigo-500'
-                                : motivoExtemporaneo.trim().length < 10
-                                ? 'border-amber-500/60 focus:border-amber-500'
-                                : 'border-emerald-500/60 focus:border-emerald-500'
-                            }`}
-                          />
-                          <p
-                            className={`text-[10px] mt-1 ${
-                              motivoExtemporaneo.trim().length >= 10
-                                ? 'text-emerald-400'
-                                : 'text-slate-400'
-                            }`}
-                          >
-                            {motivoExtemporaneo.trim().length >= 10
-                              ? '✓ Motivo suficiente para revisión del Administrador.'
-                              : `⚠️ Se requieren al menos 10 caracteres (faltan ${Math.max(
-                                  0,
-                                  10 - motivoExtemporaneo.trim().length
-                                )}).`}
-                          </p>
+
+                          <div>
+                            <div className="flex items-center justify-between mb-1">
+                              <label className="text-[11px] font-semibold text-slate-300">
+                                Motivo o Justificación del Retraso *
+                              </label>
+                              <span
+                                className={`text-[10px] font-mono font-bold ${
+                                  motivoExtemporaneo.trim().length >= 10
+                                    ? 'text-emerald-400'
+                                    : motivoExtemporaneo.trim().length > 0
+                                    ? 'text-amber-400'
+                                    : 'text-slate-400'
+                                }`}
+                              >
+                                {motivoExtemporaneo.trim().length}/10 caracteres mín.
+                              </span>
+                            </div>
+                            <textarea
+                              rows={2}
+                              placeholder="Ej. Sin señal telefónica en comunidad rural durante la ruta..."
+                              value={motivoExtemporaneo}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setMotivoExtemporaneo(val);
+                                if (val.trim().length >= 10) {
+                                  setPaymentFormErrors((prev) => {
+                                    const next = { ...prev };
+                                    delete next.motivoExtemporaneo;
+                                    return next;
+                                  });
+                                }
+                              }}
+                              className={`w-full px-3 py-2 rounded-xl bg-slate-950 border text-white text-xs focus:outline-none resize-none transition-colors ${
+                                paymentFormErrors.motivoExtemporaneo
+                                  ? 'border-rose-500 ring-1 ring-rose-500'
+                                  : motivoExtemporaneo.trim().length >= 10
+                                  ? 'border-emerald-500/60 focus:border-emerald-500'
+                                  : motivoExtemporaneo.trim().length > 0
+                                  ? 'border-amber-500/60 focus:border-amber-500'
+                                  : 'border-slate-700 focus:border-indigo-500'
+                              }`}
+                            />
+                            {paymentFormErrors.motivoExtemporaneo ? (
+                              <p className="text-[10px] text-rose-400 font-semibold mt-1 flex items-center gap-1">
+                                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                                {paymentFormErrors.motivoExtemporaneo}
+                              </p>
+                            ) : (
+                              <p
+                                className={`text-[10px] mt-1 ${
+                                  motivoExtemporaneo.trim().length >= 10
+                                    ? 'text-emerald-400'
+                                    : 'text-slate-400'
+                                }`}
+                              >
+                                {motivoExtemporaneo.trim().length >= 10
+                                  ? '✓ Motivo suficiente para revisión del Administrador.'
+                                  : `⚠️ Se requieren al menos 10 caracteres (faltan ${Math.max(
+                                      0,
+                                      10 - motivoExtemporaneo.trim().length
+                                    )}).`}
+                              </p>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      );
+                    })()}
                   </div>
                 )}
 
@@ -1486,8 +1576,11 @@ export default function CollectionPage() {
                   />
                 </div>
 
-                {feedbackMessage && (
-                  <p className="text-rose-400 font-bold text-xs">{feedbackMessage}</p>
+                {paymentFormErrors.general && (
+                  <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 font-bold text-xs flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                    <span>{paymentFormErrors.general}</span>
+                  </div>
                 )}
 
                 <div className="pt-2 flex gap-2">
@@ -1634,10 +1727,10 @@ export default function CollectionPage() {
                   </p>
                 </div>
 
-                {failedVisitError && (
+                {failedVisitErrors.general && (
                   <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 font-bold text-xs flex items-center gap-2">
                     <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
-                    <span>{failedVisitError}</span>
+                    <span>{failedVisitErrors.general}</span>
                   </div>
                 )}
 
@@ -1688,31 +1781,47 @@ export default function CollectionPage() {
                     placeholder="Describe los hechos que impidieron el cobro (ej. inundación de camino de acceso, deslave, etc.)..."
                     value={detallesVisita}
                     onChange={(e) => {
-                      setDetallesVisita(e.target.value);
-                      if (failedVisitError) setFailedVisitError(null);
+                      const val = e.target.value;
+                      setDetallesVisita(val);
+                      if (val.trim().length >= 10) {
+                        setFailedVisitErrors((prev) => {
+                          const next = { ...prev };
+                          delete next.detallesVisita;
+                          return next;
+                        });
+                      }
                     }}
                     className={`w-full px-3 py-2 rounded-xl bg-slate-900 border text-white text-xs focus:outline-none resize-none transition-colors ${
-                      detallesVisita.trim().length === 0
-                        ? 'border-slate-700 focus:border-amber-500'
-                        : detallesVisita.trim().length < 10
+                      failedVisitErrors.detallesVisita
+                        ? 'border-rose-500 ring-1 ring-rose-500'
+                        : detallesVisita.trim().length >= 10
+                        ? 'border-emerald-500/60 focus:border-emerald-500'
+                        : detallesVisita.trim().length > 0
                         ? 'border-amber-500/60 focus:border-amber-500'
-                        : 'border-emerald-500/60 focus:border-emerald-500'
+                        : 'border-slate-700 focus:border-amber-500'
                     }`}
                   />
-                  <p
-                    className={`text-[10px] mt-1 ${
-                      detallesVisita.trim().length >= 10
-                        ? 'text-emerald-400'
-                        : 'text-slate-400'
-                    }`}
-                  >
-                    {detallesVisita.trim().length >= 10
-                      ? '✓ Justificación suficiente para evaluación del Administrador.'
-                      : `⚠️ Se requieren al menos 10 caracteres (faltan ${Math.max(
-                          0,
-                          10 - detallesVisita.trim().length
-                        )}).`}
-                  </p>
+                  {failedVisitErrors.detallesVisita ? (
+                    <p className="text-[10px] text-rose-400 font-semibold mt-1 flex items-center gap-1">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                      {failedVisitErrors.detallesVisita}
+                    </p>
+                  ) : (
+                    <p
+                      className={`text-[10px] mt-1 ${
+                        detallesVisita.trim().length >= 10
+                          ? 'text-emerald-400'
+                          : 'text-slate-400'
+                      }`}
+                    >
+                      {detallesVisita.trim().length >= 10
+                        ? '✓ Justificación suficiente para evaluación del Administrador.'
+                        : `⚠️ Se requieren al menos 10 caracteres (faltan ${Math.max(
+                            0,
+                            10 - detallesVisita.trim().length
+                          )}).`}
+                    </p>
+                  )}
                 </div>
 
                 {/* Botones de acción */}
