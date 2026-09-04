@@ -305,14 +305,10 @@ export default function CollectionPage() {
 
     // 2. Validación de Cobro Extemporáneo
     if (esCobroExtemporaneo) {
-      const maxExtemporaneousDate = selectedItem.installment.fechaVencimiento <= todayStr
-        ? selectedItem.installment.fechaVencimiento
-        : todayStr;
-
       if (!fechaCobroReal || fechaCobroReal.trim() === '') {
         errors.fechaCobroReal = 'Debes seleccionar la fecha real en que recibiste el dinero mediante el calendario.';
-      } else if (fechaCobroReal > maxExtemporaneousDate) {
-        errors.fechaCobroReal = `La fecha real no puede ser posterior a ${maxExtemporaneousDate}.`;
+      } else if (fechaCobroReal > todayStr) {
+        errors.fechaCobroReal = `La fecha real no puede ser una fecha futura (límite máximo: hoy ${todayStr}).`;
       }
 
       if (!motivoExtemporaneo || motivoExtemporaneo.trim().length < 10) {
@@ -1403,75 +1399,74 @@ export default function CollectionPage() {
                       </div>
                     </label>
 
-                    {esCobroExtemporaneo && (() => {
-                      const maxExtemporaneousDate = selectedItem.installment.fechaVencimiento <= todayStr
-                        ? selectedItem.installment.fechaVencimiento
-                        : todayStr;
-
-                      return (
-                        <div className="space-y-3 pt-2 border-t border-indigo-500/20">
-                          <div>
-                            <div className="flex items-center justify-between mb-1">
-                              <label className="text-[11px] font-semibold text-slate-300">
-                                Fecha Real de Recepción del Dinero *
-                              </label>
-                              <span className="text-[10px] text-slate-400 font-mono">
-                                Límite: {maxExtemporaneousDate}
-                              </span>
-                            </div>
-                            <input
-                              type="date"
-                              max={maxExtemporaneousDate}
-                              min={selectedItem.loan.fechaInicio || undefined}
-                              value={fechaCobroReal}
-                              onKeyDown={(e) => e.preventDefault()}
-                              onClick={(e) => {
-                                try {
-                                  (e.currentTarget as HTMLInputElement).showPicker?.();
-                                } catch {}
-                              }}
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                if (!val) {
-                                  setFechaCobroReal('');
-                                  setPaymentFormErrors((prev) => ({
-                                    ...prev,
-                                    fechaCobroReal: 'Debes seleccionar la fecha real mediante el calendario.',
-                                  }));
-                                  return;
-                                }
-                                if (val > maxExtemporaneousDate) {
-                                  setFechaCobroReal(maxExtemporaneousDate);
-                                  setPaymentFormErrors((prev) => ({
-                                    ...prev,
-                                    fechaCobroReal: `La fecha real no puede ser posterior a ${maxExtemporaneousDate}.`,
-                                  }));
-                                } else {
-                                  setFechaCobroReal(val);
-                                  setPaymentFormErrors((prev) => {
-                                    const next = { ...prev };
-                                    delete next.fechaCobroReal;
-                                    return next;
-                                  });
-                                }
-                              }}
-                              className={`w-full px-3 py-2 rounded-xl bg-slate-950 border text-white text-xs focus:outline-none cursor-pointer transition-colors ${
-                                paymentFormErrors.fechaCobroReal
-                                  ? 'border-rose-500 ring-1 ring-rose-500'
-                                  : 'border-slate-700 focus:border-indigo-500'
-                              }`}
-                            />
-                            {paymentFormErrors.fechaCobroReal ? (
-                              <p className="text-[10px] text-rose-400 font-semibold mt-1 flex items-center gap-1">
-                                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                                {paymentFormErrors.fechaCobroReal}
-                              </p>
-                            ) : (
-                              <p className="text-[10px] text-slate-400 mt-1">
-                                📅 Solo seleccionable mediante el calendario (fechas posteriores bloqueadas).
-                              </p>
-                            )}
+                    {esCobroExtemporaneo && (
+                      <div className="space-y-3 pt-2 border-t border-indigo-500/20">
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="text-[11px] font-semibold text-slate-300">
+                              Fecha Real de Recepción del Dinero *
+                            </label>
+                            <span className="text-[10px] text-slate-400 font-mono">
+                              Límite: Hoy ({todayStr})
+                            </span>
                           </div>
+                          <input
+                            type="date"
+                            max={todayStr}
+                            value={fechaCobroReal}
+                            style={{ colorScheme: 'dark' }}
+                            onKeyDown={(e) => {
+                              if (e.key !== 'Tab' && e.key !== 'Escape') {
+                                e.preventDefault();
+                              }
+                            }}
+                            onClick={(e) => {
+                              try {
+                                (e.currentTarget as HTMLInputElement).showPicker?.();
+                              } catch {}
+                            }}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (!val) {
+                                setFechaCobroReal('');
+                                setPaymentFormErrors((prev) => ({
+                                  ...prev,
+                                  fechaCobroReal: 'Debes seleccionar la fecha real mediante el calendario.',
+                                }));
+                                return;
+                              }
+                              if (val > todayStr) {
+                                setFechaCobroReal(todayStr);
+                                setPaymentFormErrors((prev) => ({
+                                  ...prev,
+                                  fechaCobroReal: `La fecha real no puede ser una fecha futura (límite: ${todayStr}).`,
+                                }));
+                              } else {
+                                setFechaCobroReal(val);
+                                setPaymentFormErrors((prev) => {
+                                  const next = { ...prev };
+                                  delete next.fechaCobroReal;
+                                  return next;
+                                });
+                              }
+                            }}
+                            className={`w-full px-3 py-2 rounded-xl bg-slate-950 border text-white text-xs focus:outline-none cursor-pointer transition-colors ${
+                              paymentFormErrors.fechaCobroReal
+                                ? 'border-rose-500 ring-1 ring-rose-500'
+                                : 'border-slate-700 focus:border-indigo-500'
+                            }`}
+                          />
+                          {paymentFormErrors.fechaCobroReal ? (
+                            <p className="text-[10px] text-rose-400 font-semibold mt-1 flex items-center gap-1">
+                              <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                              {paymentFormErrors.fechaCobroReal}
+                            </p>
+                          ) : (
+                            <p className="text-[10px] text-slate-400 mt-1">
+                              📅 Fechas pasadas permitidas. Fechas futuras inhabilitadas.
+                            </p>
+                          )}
+                        </div>
 
                           <div>
                             <div className="flex items-center justify-between mb-1">
@@ -1538,8 +1533,7 @@ export default function CollectionPage() {
                             )}
                           </div>
                         </div>
-                      );
-                    })()}
+                      )}
                   </div>
                 )}
 
