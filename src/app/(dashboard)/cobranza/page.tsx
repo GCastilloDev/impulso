@@ -18,6 +18,7 @@ import {
   FileText,
   Layers,
   AlertCircle,
+  Receipt,
 } from 'lucide-react';
 import { useImpulsoStore } from '@/store/useImpulsoStore';
 import { InstallmentStatusBadge } from '@/components/shared/StatusBadges';
@@ -160,7 +161,36 @@ export default function CollectionPage() {
     totalTransferencia: number;
     cantidadCobros: number;
     pagosIds: string[];
-    pagosSiguienteDia: { cantidad: number; total: number };
+    pagos: Array<{
+      id: string;
+      folioRecibo: string;
+      clienteNombre: string;
+      prestamoFolio: string;
+      numeroCuota: number;
+      montoRecibido: number;
+      penalizacionCobrada: number;
+      metodoPago: string;
+      esAbonoParcial: boolean;
+      cobradorNombre: string;
+      createdAt: string;
+    }>;
+    pagosSiguienteDia: {
+      cantidad: number;
+      total: number;
+      pagos: Array<{
+        id: string;
+        folioRecibo: string;
+        clienteNombre: string;
+        prestamoFolio: string;
+        numeroCuota: number;
+        montoRecibido: number;
+        penalizacionCobrada: number;
+        metodoPago: string;
+        esAbonoParcial: boolean;
+        cobradorNombre: string;
+        createdAt: string;
+      }>;
+    };
   } | null>(null);
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
   const [folioDepositoInput, setFolioDepositoInput] = useState('');
@@ -256,7 +286,8 @@ export default function CollectionPage() {
       return item.isOverdue && item.installment.estado !== 'Pagado' && item.installment.estado !== 'Parcial';
     }
     if (activeTab === 'pagados') {
-      return item.installment.estado === 'Pagado';
+      const cobradoHoy = item.installment.fechaPagoReal === todayStr || item.installment.fechaPago?.startsWith(todayStr);
+      return item.installment.estado === 'Pagado' || (item.installment.estado === 'Parcial' && cobradoHoy);
     }
     return true;
   });
@@ -455,7 +486,8 @@ export default function CollectionPage() {
   const fetchClosurePreview = async () => {
     setIsLoadingPreview(true);
     try {
-      const res = await getClosurePreviewAction(currentUser.name);
+      const targetPromotor = isPromotorUser ? currentUser.name : (promotorFilter !== 'todos' ? promotorFilter : 'todos');
+      const res = await getClosurePreviewAction(targetPromotor);
       if (res.success && res.data) {
         setClosurePreview(res.data);
         setMontoDepositadoInput(res.data.totalCobrado);
@@ -473,7 +505,7 @@ export default function CollectionPage() {
     if (activeTab === 'arqueo') {
       fetchClosurePreview();
     }
-  }, [activeTab, payments]);
+  }, [activeTab, payments, promotorFilter]);
 
   const handleCreateClosure = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -682,7 +714,7 @@ export default function CollectionPage() {
               : 'text-slate-400 hover:text-white'
           }`}
         >
-          <CheckCircle2 className="w-3.5 h-3.5" /> Cobrados Hoy ({collectionList.filter(i => i.installment.estado === 'Pagado').length})
+          <CheckCircle2 className="w-3.5 h-3.5" /> Cobrados Hoy ({collectionList.filter(i => i.installment.estado === 'Pagado' || (i.installment.estado === 'Parcial' && (i.installment.fechaPagoReal === todayStr || i.installment.fechaPago?.startsWith(todayStr)))).length})
         </button>
 
         <button
@@ -730,7 +762,9 @@ export default function CollectionPage() {
                   Jornada de Cobranza del Día
                 </span>
                 <h3 className="text-lg font-extrabold text-white mt-0.5 flex items-center gap-2">
-                  Arqueo de Ruta: <span className="text-teal-300">{currentUser.name}</span>
+                  Arqueo de Ruta: <span className="text-teal-300">
+                    {isPromotorUser ? currentUser.name : (promotorFilter !== 'todos' ? promotorFilter : 'Todos los Promotores')}
+                  </span>
                 </h3>
               </div>
               <div className="flex items-center gap-2 bg-slate-900/90 px-3 py-1.5 rounded-xl border border-slate-800 text-xs">
@@ -777,16 +811,125 @@ export default function CollectionPage() {
 
                 {/* Alerta de cobros posteriores a las 16:00 hrs */}
                 {closurePreview.pagosSiguienteDia.cantidad > 0 && (
-                  <div className="p-3 rounded-xl bg-indigo-950/30 border border-indigo-500/30 text-xs text-indigo-300 flex items-start gap-2">
-                    <Clock className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
-                    <div>
-                      <span className="font-bold block">Regla de Corte de las 16:00 hrs aplicada:</span>
-                      <span>
-                        Tienes <strong>{closurePreview.pagosSiguienteDia.cantidad} cobro(s)</strong> registrados después de las 16:00 hrs ({formatCurrency(closurePreview.pagosSiguienteDia.total)}). Por política institucional, se acumularán automáticamente en el arqueo del siguiente día.
-                      </span>
+                  <div className="p-4 rounded-2xl bg-indigo-950/30 border border-indigo-500/30 space-y-3">
+                    <div className="flex items-start gap-2 text-xs text-indigo-300">
+                      <Clock className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-bold block">Regla de Corte de las 16:00 hrs aplicada:</span>
+                        <span>
+                          Tienes <strong>{closurePreview.pagosSiguienteDia.cantidad} cobro(s)</strong> registrados después de las 16:00 hrs ({formatCurrency(closurePreview.pagosSiguienteDia.total)}). Por política institucional, se acumularán automáticamente en el arqueo del siguiente día.
+                        </span>
+                      </div>
                     </div>
+                    {closurePreview.pagosSiguienteDia.pagos && closurePreview.pagosSiguienteDia.pagos.length > 0 && (
+                      <div className="overflow-x-auto pt-1">
+                        <table className="w-full text-left text-xs border-collapse">
+                          <thead>
+                            <tr className="border-b border-indigo-900/50 text-indigo-400/80 font-semibold text-[10px]">
+                              <th className="py-1.5 px-2">Folio Recibo</th>
+                              <th className="py-1.5 px-2">Cliente</th>
+                              <th className="py-1.5 px-2">Cuota</th>
+                              <th className="py-1.5 px-2 text-right">Monto</th>
+                              <th className="py-1.5 px-2 text-center">Tipo</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-indigo-900/30 text-slate-300">
+                            {closurePreview.pagosSiguienteDia.pagos.map((p) => (
+                              <tr key={p.id}>
+                                <td className="py-1.5 px-2 font-mono text-indigo-300 font-semibold">{p.folioRecibo}</td>
+                                <td className="py-1.5 px-2 font-medium">{p.clienteNombre}</td>
+                                <td className="py-1.5 px-2 font-mono">#{p.numeroCuota}</td>
+                                <td className="py-1.5 px-2 text-right font-mono font-bold text-indigo-200">{formatCurrency(p.montoRecibido)}</td>
+                                <td className="py-1.5 px-2 text-center">
+                                  {p.esAbonoParcial ? (
+                                    <span className="px-1.5 py-0.5 rounded text-[10px] bg-amber-500/20 text-amber-300 font-medium">Parcial</span>
+                                  ) : (
+                                    <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-300 font-medium">Liquidada</span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
                   </div>
                 )}
+
+                {/* Desglose Detallado de Recibos en Arqueo */}
+                <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-extrabold text-white text-xs flex items-center gap-1.5">
+                      <Receipt className="w-4 h-4 text-teal-400" />
+                      Recibos de la Jornada en Curso ({closurePreview.pagos?.length || 0})
+                    </h4>
+                    <span className="text-[11px] font-mono text-emerald-400 font-bold">
+                      Subtotal: {formatCurrency(closurePreview.totalCobrado)}
+                    </span>
+                  </div>
+
+                  {closurePreview.pagos && closurePreview.pagos.length > 0 ? (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="border-b border-slate-800 text-slate-400 font-semibold text-[11px]">
+                            <th className="py-2 px-2">Folio Recibo</th>
+                            <th className="py-2 px-2">Cliente / Préstamo</th>
+                            <th className="py-2 px-2">Cuota</th>
+                            <th className="py-2 px-2">Cobrador</th>
+                            <th className="py-2 px-2">Método</th>
+                            <th className="py-2 px-2 text-right">Monto Recaudado</th>
+                            <th className="py-2 px-2 text-center">Tipo</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-800/60 text-slate-200">
+                          {closurePreview.pagos.map((p) => {
+                            const amortizacion = Math.max(0, Math.round((p.montoRecibido - (p.penalizacionCobrada || 0)) * 100) / 100);
+                            return (
+                              <tr key={p.id} className="hover:bg-slate-800/30 transition-colors">
+                                <td className="py-2 px-2 font-mono text-teal-300 font-semibold">{p.folioRecibo}</td>
+                                <td className="py-2 px-2">
+                                  <span className="font-bold text-white block">{p.clienteNombre}</span>
+                                  <span className="text-[10px] text-slate-400 font-mono">{p.prestamoFolio}</span>
+                                </td>
+                                <td className="py-2 px-2 font-mono">#{p.numeroCuota}</td>
+                                <td className="py-2 px-2 text-slate-300">{p.cobradorNombre}</td>
+                                <td className="py-2 px-2">
+                                  <span className="px-1.5 py-0.5 rounded text-[10px] bg-slate-800 text-slate-300 border border-slate-700">
+                                    {p.metodoPago}
+                                  </span>
+                                </td>
+                                <td className="py-2 px-2 text-right font-mono font-bold text-emerald-400">
+                                  {formatCurrency(p.montoRecibido)}
+                                  {p.penalizacionCobrada > 0 && (
+                                    <span className="block text-[9px] text-rose-400 font-normal">
+                                      (Abono: {formatCurrency(amortizacion)} + Mora: {formatCurrency(p.penalizacionCobrada)})
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="py-2 px-2 text-center">
+                                  {p.esAbonoParcial ? (
+                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                                      Abono Parcial
+                                    </span>
+                                  ) : (
+                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                                      Liquidada
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="py-4 text-center text-slate-500 text-xs">
+                      No hay recibos pendientes de corte para esta jornada.
+                    </div>
+                  )}
+                </div>
 
                 {/* Formulario de Cierre de Ruta (Promotor) */}
                 {isPromotorUser && closurePreview.cantidadCobros > 0 && (
@@ -1152,13 +1295,28 @@ export default function CollectionPage() {
                   </div>
 
                   <div>
-                    <span className="text-slate-400 text-[11px]">Monto a Cobrar:</span>
-                    <p className={`font-black text-sm ${item.isOverdue ? 'text-rose-300' : 'text-emerald-400'}`}>
-                      {formatCurrency(totalACobrarCard)}
+                    <span className="text-slate-400 text-[11px]">
+                      {activeTab === 'pagados'
+                        ? item.installment.estado === 'Parcial'
+                          ? 'Abonado Hoy (Amortizado):'
+                          : 'Total Liquidado:'
+                        : 'Monto a Cobrar:'}
+                    </span>
+                    <p className={`font-black text-sm ${activeTab === 'pagados' ? 'text-emerald-400' : item.isOverdue ? 'text-rose-300' : 'text-emerald-400'}`}>
+                      {formatCurrency(
+                        activeTab === 'pagados'
+                          ? item.installment.montoPagado || item.installment.cuotaTotal
+                          : totalACobrarCard
+                      )}
                     </p>
-                    {item.isOverdue && recargoMoraCard > 0 && !isEnRevision && (
+                    {activeTab !== 'pagados' && item.isOverdue && recargoMoraCard > 0 && !isEnRevision && (
                       <span className="block text-[10px] text-rose-400 font-extrabold mt-0.5">
                         ⚠️ Incluye +{formatCurrency(recargoMoraCard)} recargo mora
+                      </span>
+                    )}
+                    {activeTab === 'pagados' && item.installment.estado === 'Parcial' && (
+                      <span className="block text-[10px] text-amber-400 font-bold mt-0.5">
+                        Restante por cobrar: {formatCurrency(item.installment.saldoPendiente)}
                       </span>
                     )}
                   </div>
@@ -1180,6 +1338,21 @@ export default function CollectionPage() {
                     <div className="flex-1 py-3 px-3 rounded-xl bg-indigo-500/10 text-indigo-300 border border-indigo-500/30 text-xs font-bold text-center flex items-center justify-center gap-1.5">
                       <Clock className="w-4 h-4 text-indigo-400" /> Solicitud en Revisión de Administrador
                     </div>
+                  ) : activeTab === 'pagados' ? (
+                    item.installment.estado === 'Parcial' ? (
+                      <div className="flex-1 py-2.5 px-3 rounded-xl bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 text-xs font-bold text-center flex flex-col sm:flex-row items-center justify-between gap-1">
+                        <span className="flex items-center gap-1.5 text-emerald-400">
+                          <Check className="w-4 h-4" /> Abono Registrado Hoy ({formatCurrency(item.installment.montoPagado)})
+                        </span>
+                        <span className="text-[11px] text-amber-300 font-normal">
+                          Saldo Restante: <strong className="font-mono">{formatCurrency(item.installment.saldoPendiente)}</strong>
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="flex-1 py-2.5 px-3 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 text-xs font-bold text-center flex items-center justify-center gap-1.5">
+                        <Check className="w-4 h-4" /> Cobro Liquidado ({formatCurrency(item.installment.montoPagado || item.installment.cuotaTotal)})
+                      </div>
+                    )
                   ) : item.installment.estado !== 'Pagado' ? (
                     <div className="flex-1 flex flex-col sm:flex-row gap-2">
                       <button
@@ -1191,7 +1364,9 @@ export default function CollectionPage() {
                         }`}
                       >
                         <DollarSign className="w-4 h-4 stroke-[3]" />
-                        Registrar Cobro ({formatCurrency(totalACobrarCard)})
+                        {item.installment.estado === 'Parcial'
+                          ? `Completar Cobro (${formatCurrency(totalACobrarCard)})`
+                          : `Registrar Cobro (${formatCurrency(totalACobrarCard)})`}
                       </button>
                       <button
                         type="button"
