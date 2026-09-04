@@ -8,34 +8,62 @@ import { CashClosure, EstatusCierre } from '@/types';
  * Obtiene el desglose previo del arqueo para un promotor, aplicando la
  * regla de corte contable a las 16:00 hrs y separando pagos para el día siguiente.
  */
+function getMexicoCityTime(date: Date) {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Mexico_City',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+  const parts = formatter.formatToParts(date);
+  const map: Record<string, string> = {};
+  parts.forEach((p) => {
+    map[p.type] = p.value;
+  });
+  return {
+    dateStr: `${map.year}-${map.month}-${map.day}`,
+    hours: parseInt(map.hour || '0', 10),
+    minutes: parseInt(map.minute || '0', 10),
+  };
+}
+
+/**
+ * Obtiene el desglose previo del arqueo para un promotor, aplicando la
+ * regla de corte contable a las 16:00 hrs en zona horaria de México y separando pagos para el día siguiente.
+ */
 export async function getClosurePreviewAction(promotorNombre: string) {
   noStore();
   try {
-    // Pagos aplicados del promotor que aún no han sido incluidos en un cierre
+    const whereCondition: Record<string, unknown> = {
+      estatus: 'Aplicado',
+      cierreId: null,
+      montoRecibido: { gt: 0 },
+    };
+
+    if (promotorNombre && promotorNombre !== 'todos') {
+      whereCondition.cobradorNombre = promotorNombre;
+    }
+
+    // Pagos aplicados que aún no han sido incluidos en un cierre
     const unclosedPayments = await db.paymentRecord.findMany({
-      where: {
-        cobradorNombre: promotorNombre,
-        estatus: 'Aplicado',
-        cierreId: null,
-        montoRecibido: { gt: 0 },
-      },
+      where: whereCondition,
       orderBy: { createdAt: 'asc' },
     });
 
-    const now = new Date();
-    const todayStr = now.toISOString().split('T')[0];
+    const nowMexico = getMexicoCityTime(new Date());
+    const todayStr = nowMexico.dateStr;
 
-    // Clasificación por horario de corte (16:00 hrs)
+    // Clasificación por horario de corte (16:00 hrs México)
     const pagosCorteActual: typeof unclosedPayments = [];
     const pagosSiguienteDia: typeof unclosedPayments = [];
 
     unclosedPayments.forEach((payment) => {
-      const paymentDate = new Date(payment.createdAt);
-      const hours = paymentDate.getHours();
-      const minutes = paymentDate.getMinutes();
-      const isPast16hrs = hours > 16 || (hours === 16 && minutes > 0);
-
-      const isPaymentToday = paymentDate.toISOString().split('T')[0] === todayStr;
+      const paymentMexico = getMexicoCityTime(new Date(payment.createdAt));
+      const isPast16hrs = paymentMexico.hours > 16 || (paymentMexico.hours === 16 && paymentMexico.minutes > 0);
+      const isPaymentToday = paymentMexico.dateStr === todayStr;
 
       if (isPaymentToday && isPast16hrs) {
         pagosSiguienteDia.push(payment);
@@ -67,9 +95,35 @@ export async function getClosurePreviewAction(promotorNombre: string) {
         totalTransferencia: Math.round(totalTransferencia * 100) / 100,
         cantidadCobros: pagosCorteActual.length,
         pagosIds: pagosCorteActual.map((p) => p.id),
+        pagos: pagosCorteActual.map((p) => ({
+          id: p.id,
+          folioRecibo: p.folioRecibo,
+          clienteNombre: p.clienteNombre,
+          prestamoFolio: p.prestamoFolio,
+          numeroCuota: p.numeroCuota,
+          montoRecibido: p.montoRecibido,
+          penalizacionCobrada: p.penalizacionCobrada,
+          metodoPago: p.metodoPago,
+          esAbonoParcial: p.esAbonoParcial,
+          cobradorNombre: p.cobradorNombre,
+          createdAt: p.createdAt.toISOString(),
+        })),
         pagosSiguienteDia: {
           cantidad: pagosSiguienteDia.length,
           total: Math.round(totalPost16hrs * 100) / 100,
+          pagos: pagosSiguienteDia.map((p) => ({
+            id: p.id,
+            folioRecibo: p.folioRecibo,
+            clienteNombre: p.clienteNombre,
+            prestamoFolio: p.prestamoFolio,
+            numeroCuota: p.numeroCuota,
+            montoRecibido: p.montoRecibido,
+            penalizacionCobrada: p.penalizacionCobrada,
+            metodoPago: p.metodoPago,
+            esAbonoParcial: p.esAbonoParcial,
+            cobradorNombre: p.cobradorNombre,
+            createdAt: p.createdAt.toISOString(),
+          })),
         },
       },
     };
