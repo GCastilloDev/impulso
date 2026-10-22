@@ -23,7 +23,7 @@ Para evitar burocracia innecesaria en cambios menores y garantizar cero regresio
 Aplica cuando se introduce una nueva pantalla, módulo o flujo de negocio desde cero.
 1. **Spec & Contratos:** El agente `sdd-spec` redacta un nuevo documento en `docs/sdd/SDD-XXX-<nombre>.md` usando la plantilla oficial.
 2. **Grafo de Tareas (Task DAG):** Se descompone la funcionalidad en tareas atómicas con dependencias claras para ejecución paralela.
-3. **Despacho a Subagentes:** El orquestador despacha los nodos del DAG a los agentes especializados (`fullstack-dev`, `ui-ux`) en Herdr.
+3. **Despacho a Subagentes en Herdr:** El orquestador despacha los nodos del DAG a los agentes especializados (`fullstack-dev`, `ui-ux`) creando siempre panes físicos dedicados en Herdr (`herdr pane split --current --direction right --no-focus`) siguiendo `.agents/rules/herdr_orchestration.md`. Prohibido correr agentes headless invisibles.
 4. **Auditoría Cruzada:** Verificación con `financial-core`, `security-audit`, `qa-testing` y `code-review`.
 5. **Cierre:** Commits atómicos con `atomic-commits`.
 

@@ -37,6 +37,7 @@ Consulte la skill en `.agents/skills/atomic-commits/SKILL.md` para el procedimie
 ---
 
 ## 5. Reglas del Workspace (`.agents/rules/`)
+* **`herdr_orchestration.md`:** Orquestación visual de subagentes en panes dedicados de Herdr (cero agentes headless).
 * **`modals.md`:** Manejo estricto de modales (tecla Escape, sin cierre por clic en backdrop, sin `alert`/`confirm` nativos).
 * **`client_assignment.md`:** Restricción y asignación automática de clientes para Promotores de Campo vs Administradores.
 * **`form_validations.md`:** Validación secuencial visual de formularios de arriba hacia abajo.
