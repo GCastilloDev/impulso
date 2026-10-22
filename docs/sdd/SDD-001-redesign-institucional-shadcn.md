@@ -1,7 +1,7 @@
 # SDD-001: Rediseño Institucional "Light-First" e Integración de shadcn/ui
 
 > **Documento de Especificación y Lógica de Negocio (Spec-Driven Development)**  
-> **Estado:** `APROBADO`  
+> **Estado:** `COMPLETADO`  
 > **Agente Responsable del Spec:** `sdd-spec`  
 > **Fecha de Creación:** 2026-10-22  
 
@@ -117,9 +117,9 @@ Cada tarea se ejecutará en un pane físico dedicado según `.agents/rules/herdr
 
 ## 5. Checklist de Verificación y Aceptación
 
-- [ ] Cero transparencias `.glass-panel` o brillos `.glow-*` en todo el proyecto.
-- [ ] Textos con contraste superior a 7.0:1 sobre fondos claros.
-- [ ] Botones de cobro y acciones críticas con altura mínima de $44\text{px}$ a $48\text{px}$.
-- [ ] Modales no se cierran al hacer clic en el backdrop.
-- [ ] Compilación TypeScript (`npx tsc --noEmit`) con 0 errores.
-- [ ] Commits atómicos registrados y subidos a `origin/main`.
+- [x] Cero transparencias `.glass-panel` o brillos `.glow-*` en todo el proyecto.
+- [x] Textos con contraste superior a 7.0:1 sobre fondos claros.
+- [x] Botones de cobro y acciones críticas con altura mínima de $44\text{px}$ a $48\text{px}$.
+- [x] Modales no se cierran al hacer clic en el backdrop.
+- [x] Compilación TypeScript (`npx tsc --noEmit`) con 0 errores.
+- [x] Commits atómicos registrados y subidos a `origin/main`.
