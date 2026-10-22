@@ -21,12 +21,19 @@ import {
   ChevronDown,
   Check,
   Edit3,
+  X,
+  Eye,
 } from 'lucide-react';
 import { useImpulsoStore } from '@/store/useImpulsoStore';
 import { CreditScoreBadge } from '@/components/shared/StatusBadges';
 import { formatDate, onlyDigits, validatePhone, validatePostalCode } from '@/lib/utils';
 import { Client, ScoreCrediticio } from '@/types';
 import { getClientsAction, createClientAction, updateClientAction } from '@/app/actions/clienteActions';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 
 export default function ClientsPage() {
   const { clients, setClients, loans, users, currentUser, loadDataFromDB } = useImpulsoStore();
@@ -584,10 +591,10 @@ export default function ClientsPage() {
 
   if (isPageLoading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[400px] p-12 space-y-4 glass-panel rounded-3xl border border-slate-800 my-8">
-        <Loader2 className="w-10 h-10 text-emerald-400 animate-spin" />
-        <p className="text-sm font-semibold text-slate-300">Consultando catálogo de clientes en tiempo real desde PostgreSQL...</p>
-      </div>
+      <Card className="flex flex-col items-center justify-center min-h-[400px] p-12 space-y-4 my-8 bg-card border-border shadow-sm">
+        <Loader2 className="w-10 h-10 text-primary animate-spin" />
+        <p className="text-base font-semibold text-muted-foreground">Consultando catálogo de clientes en tiempo real desde PostgreSQL...</p>
+      </Card>
     );
   }
 
@@ -596,224 +603,239 @@ export default function ClientsPage() {
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-extrabold text-white flex items-center gap-2 tracking-tight">
-            <Users className="w-7 h-7 text-emerald-400" />
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-foreground flex items-center gap-2.5 tracking-tight">
+            <Users className="w-8 h-8 text-primary" />
             Directorio de Clientes
           </h1>
-          <p className="text-sm text-slate-400">
+          <p className="text-base text-muted-foreground mt-1">
             {isPromotor
               ? `Mostrando únicamente tus clientes asignados (${currentUser.name})`
               : 'Gestión completa de cartera, asignación de promotores y control de visibilidad.'}
           </p>
         </div>
 
-        <button
+        <Button
           onClick={() => {
             resetForm();
             setIsModalOpen(true);
           }}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-extrabold text-sm shadow-lg shadow-emerald-500/20 transition-all"
+          className="h-12 px-6 min-h-[44px] text-base font-bold shadow-sm"
         >
-          <UserPlus className="w-4 h-4 stroke-[3]" />
+          <UserPlus className="w-5 h-5 stroke-[2.5]" />
           Nuevo Cliente
-        </button>
+        </Button>
       </div>
 
       {/* Filters Toolbar */}
-      <div className="glass-panel p-4 rounded-2xl border border-slate-800 flex flex-col md:flex-row gap-3 justify-between items-center">
-        <div className="relative w-full md:w-72">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            placeholder="Buscar por Nombre, CURP, INE..."
-            value={searchTerm}
-            onChange={(e) => {
-              setSearchTerm(e.target.value);
-              setCurrentPage(1);
-            }}
-            className="w-full pl-9 pr-4 py-2 rounded-xl bg-slate-900/90 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500"
-          />
-        </div>
-
-        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
-          {/* Filter Score */}
-          <div className="flex items-center gap-1.5">
-            <Filter className="w-3.5 h-3.5 text-slate-400" />
-            <span className="text-xs text-slate-400 font-medium">Score:</span>
-            <select
-              value={scoreFilter}
+      <Card className="border-border shadow-sm">
+        <CardContent className="p-4 flex flex-col md:flex-row gap-4 justify-between items-stretch md:items-center">
+          <div className="relative w-full md:w-80">
+            <Search className="w-5 h-5 text-muted-foreground absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <Input
+              type="text"
+              placeholder="Buscar por Nombre, CURP, INE..."
+              value={searchTerm}
               onChange={(e) => {
-                setScoreFilter(e.target.value);
+                setSearchTerm(e.target.value);
                 setCurrentPage(1);
               }}
-              className="px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500"
-            >
-              <option value="todos">Todos</option>
-              <option value="Excelente">Excelente</option>
-              <option value="Bueno">Bueno</option>
-              <option value="Regular">Regular</option>
-              <option value="Alto Riesgo">Alto Riesgo</option>
-            </select>
+              className="pl-11 h-12 text-base bg-white"
+            />
           </div>
 
-          {/* Filter Promotor (Only for Admin) */}
-          {isAdmin && (
-            <div className="flex items-center gap-1.5">
-              <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="text-xs text-slate-400 font-medium">Promotor:</span>
+          <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+            {/* Filter Score */}
+            <div className="flex items-center gap-2">
+              <Filter className="w-5 h-5 text-muted-foreground shrink-0" />
+              <label htmlFor="client-score-filter" className="text-base text-muted-foreground font-semibold whitespace-nowrap">
+                Score:
+              </label>
               <select
-                value={promotorFilter}
+                id="client-score-filter"
+                value={scoreFilter}
                 onChange={(e) => {
-                  setPromotorFilter(e.target.value);
+                  setScoreFilter(e.target.value);
                   setCurrentPage(1);
                 }}
-                className="px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500"
+                className="h-12 min-h-[44px] px-4 py-2 rounded-xl border border-input bg-white text-foreground text-base font-medium focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 transition-colors"
               >
-                <option value="todos">Todos los clientes</option>
-                <option value="sin_asignar">Sin Asignar</option>
-                {activePromotores.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
+                <option value="todos">Todos</option>
+                <option value="Excelente">Excelente</option>
+                <option value="Bueno">Bueno</option>
+                <option value="Regular">Regular</option>
+                <option value="Alto Riesgo">Alto Riesgo</option>
               </select>
             </div>
-          )}
-        </div>
-      </div>
+
+            {/* Filter Promotor (Only for Admin) */}
+            {isAdmin && (
+              <div className="flex items-center gap-2">
+                <UserCheck className="w-5 h-5 text-primary shrink-0" />
+                <label htmlFor="client-promoter-filter" className="text-base text-muted-foreground font-semibold whitespace-nowrap">
+                  Promotor:
+                </label>
+                <select
+                  id="client-promoter-filter"
+                  value={promotorFilter}
+                  onChange={(e) => {
+                    setPromotorFilter(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  className="h-12 min-h-[44px] px-4 py-2 rounded-xl border border-input bg-white text-foreground text-base font-medium focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 transition-colors"
+                >
+                  <option value="todos">Todos los clientes</option>
+                  <option value="sin_asignar">Sin Asignar</option>
+                  {activePromotores.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Clients Table */}
-      <div className="glass-panel rounded-2xl border border-slate-800 overflow-hidden flex flex-col justify-between">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs min-w-[950px]">
-            <thead className="bg-slate-900/90 text-slate-400 font-semibold border-b border-slate-800 uppercase tracking-wider whitespace-nowrap">
-              <tr>
-                <th className="p-4 min-w-[200px]">Folio & Cliente</th>
-                <th className="p-4 min-w-[230px]">Identificación (CURP / RFC / INE)</th>
-                <th className="p-4 min-w-[170px]">Promotor Asignado</th>
-                <th className="p-4 min-w-[140px]">Score Crediticio</th>
-                <th className="p-4 min-w-[120px]">Préstamos</th>
-                <th className="p-4 text-right min-w-[190px]">Acciones</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800/80">
-              {paginatedClients.map((client) => {
-                const clientLoans = loans.filter((l) => l.clienteId === client.id);
-                const activeLoansCount = clientLoans.filter((l) => l.estatus === 'Activo' || l.estatus === 'En Mora').length;
-                const promotorName = client.promotorAsignadoNombre;
+      <Card className="border-border shadow-sm overflow-hidden flex flex-col justify-between">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="min-w-[200px]">Folio & Cliente</TableHead>
+              <TableHead className="min-w-[220px]">Identificación (CURP / RFC / INE)</TableHead>
+              <TableHead className="min-w-[180px]">Promotor Asignado</TableHead>
+              <TableHead className="min-w-[140px]">Score Crediticio</TableHead>
+              <TableHead className="min-w-[130px]">Préstamos</TableHead>
+              <TableHead className="text-right min-w-[200px]">Acciones</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {paginatedClients.map((client) => {
+              const clientLoans = loans.filter((l) => l.clienteId === client.id);
+              const activeLoansCount = clientLoans.filter((l) => l.estatus === 'Activo' || l.estatus === 'En Mora').length;
+              const promotorName = client.promotorAsignadoNombre;
 
-                return (
-                  <tr key={client.id} className="hover:bg-slate-800/40 transition-colors">
-                    <td className="p-4">
-                      <div>
-                        <Link
-                          href={`/clientes/${client.id}`}
-                          className="font-bold text-white text-sm hover:text-emerald-400 transition-colors"
+              return (
+                <TableRow key={client.id}>
+                  <TableCell>
+                    <div className="space-y-0.5">
+                      <Link
+                        href={`/clientes/${client.id}`}
+                        className="font-bold text-foreground text-base hover:text-primary transition-colors block"
+                      >
+                        {client.nombre}
+                      </Link>
+                      <p className="text-sm text-muted-foreground flex items-center gap-1 font-mono">
+                        {client.folio} • <span className="text-slate-500">Alta: {formatDate(client.fechaRegistro)}</span>
+                      </p>
+                    </div>
+                  </TableCell>
+
+                  <TableCell>
+                    <div className="font-mono text-sm space-y-0.5">
+                      <div className="text-foreground font-semibold">CURP: {client.curp}</div>
+                      <div className="text-slate-700">RFC: {client.rfc || 'N/A'}</div>
+                      <div className="text-slate-700">INE: {client.folioIne || 'N/A'}</div>
+                    </div>
+                  </TableCell>
+
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      {promotorName ? (
+                        <span className="font-bold text-foreground text-sm">{promotorName}</span>
+                      ) : (
+                        <Badge variant="warning" className="text-xs font-bold">
+                          Sin Asignar
+                        </Badge>
+                      )}
+
+                      {isAdmin && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            setClientToReassign(client);
+                            setSelectedNewPromotorId(client.promotorAsignadoId || '');
+                          }}
+                          className="h-9 w-9 min-h-[36px] min-w-[36px] text-primary hover:text-primary/80 hover:bg-slate-100 rounded-lg"
+                          title="Asignar / Cambiar Promotor"
                         >
-                          {client.nombre}
-                        </Link>
-                        <p className="text-[11px] text-slate-400 flex items-center gap-1 font-mono">
-                          {client.folio} • <span className="text-slate-500">Alta: {formatDate(client.fechaRegistro)}</span>
-                        </p>
-                      </div>
-                    </td>
+                          <UserCog className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
+                  </TableCell>
 
-                    <td className="p-4 space-y-0.5 font-mono text-[11px]">
-                      <div className="text-slate-200">CURP: {client.curp}</div>
-                      <div className="text-emerald-400">RFC: {client.rfc || 'N/A'}</div>
-                      <div className="text-indigo-400">INE: {client.folioIne || 'N/A'}</div>
-                    </td>
+                  <TableCell>
+                    <CreditScoreBadge score={client.scoreCrediticio} />
+                  </TableCell>
 
-                    <td className="p-4">
-                      <div className="flex items-center gap-2">
-                        {promotorName ? (
-                          <span className="font-semibold text-slate-200">{promotorName}</span>
-                        ) : (
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-300 border border-amber-500/20">
-                            Sin Asignar
-                          </span>
-                        )}
+                  <TableCell>
+                    <Badge variant="outline" className="bg-slate-100 text-slate-800 border-slate-300 font-bold text-xs py-1 px-2.5">
+                      {activeLoansCount} préstamo(s)
+                    </Badge>
+                  </TableCell>
 
-                        {isAdmin && (
-                          <button
-                            onClick={() => {
-                              setClientToReassign(client);
-                              setSelectedNewPromotorId(client.promotorAsignadoId || '');
-                            }}
-                            className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-emerald-400 hover:text-white transition-all"
-                            title="Asignar / Cambiar Promotor"
-                          >
-                            <UserCog className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                      </div>
-                    </td>
-
-                    <td className="p-4">
-                      <CreditScoreBadge score={client.scoreCrediticio} />
-                    </td>
-
-                    <td className="p-4">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-semibold border border-slate-700">
-                        {activeLoansCount} préstamo(s)
-                      </span>
-                    </td>
-
-                    <td className="p-4 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        {isAdmin && (
-                          <button
-                            onClick={() => handleOpenEditModal(client)}
-                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 transition-all"
-                            title="Editar Expediente (Solo Administrador)"
-                          >
-                            <Edit3 className="w-3.5 h-3.5" />
-                            Editar
-                          </button>
-                        )}
-
-                        <Link
-                          href={`/clientes/${client.id}`}
-                          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 transition-all"
+                  <TableCell className="text-right">
+                    <div className="flex items-center justify-end gap-2 flex-wrap">
+                      {isAdmin && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleOpenEditModal(client)}
+                          className="h-11 min-h-[44px] px-3.5 font-bold border-border bg-white text-foreground hover:bg-slate-100 gap-1.5 text-xs shadow-xs"
+                          title="Editar Expediente (Solo Administrador)"
                         >
+                          <Edit3 className="w-4 h-4 text-amber-600" />
+                          Editar
+                        </Button>
+                      )}
+
+                      <Button
+                        asChild
+                        size="sm"
+                        className="h-11 min-h-[44px] px-3.5 font-bold text-xs shadow-xs gap-1.5"
+                      >
+                        <Link href={`/clientes/${client.id}`}>
                           Ver Expediente
-                          <ChevronRight className="w-3.5 h-3.5" />
+                          <ChevronRight className="w-4 h-4" />
                         </Link>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
 
-              {paginatedClients.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="p-8 text-center text-slate-500">
-                    No se encontraron clientes con el criterio de búsqueda o alcance de rol ({currentUser.role}).
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+            {paginatedClients.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={6} className="p-8 text-center text-muted-foreground text-base">
+                  No se encontraron clientes con el criterio de búsqueda o alcance de rol ({currentUser.role}).
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
 
         {/* Paginación Bar */}
-        <div className="p-4 bg-slate-900/60 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-3 text-slate-400">
+        <div className="p-4 bg-slate-50 border-t border-border flex flex-col sm:flex-row items-center justify-between gap-4 text-sm">
+          <div className="flex items-center gap-3 text-muted-foreground">
             <span>
-              Mostrando <strong className="text-white">{startIndex + 1}</strong> a{' '}
-              <strong className="text-white">{Math.min(startIndex + itemsPerPage, totalItems)}</strong> de{' '}
-              <strong className="text-emerald-400">{totalItems}</strong> clientes
+              Mostrando <strong className="text-foreground">{totalItems > 0 ? startIndex + 1 : 0}</strong> a{' '}
+              <strong className="text-foreground">{Math.min(startIndex + itemsPerPage, totalItems)}</strong> de{' '}
+              <strong className="text-primary font-bold">{totalItems}</strong> clientes
             </span>
 
-            <div className="flex items-center gap-1">
-              <span className="text-slate-500">Filas por página:</span>
+            <div className="flex items-center gap-2">
+              <span className="text-slate-500 font-medium">Filas por página:</span>
               <select
                 value={itemsPerPage}
                 onChange={(e) => {
                   setItemsPerPage(Number(e.target.value));
                   setCurrentPage(1);
                 }}
-                className="px-2 py-1 rounded-lg bg-slate-900 border border-slate-700 text-white font-bold"
+                className="h-10 px-3 py-1 rounded-xl bg-white border border-input text-foreground font-bold text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               >
                 <option value={5}>5</option>
                 <option value={10}>10</option>
@@ -823,49 +845,76 @@ export default function ClientsPage() {
           </div>
 
           <div className="flex items-center gap-2">
-            <button
+            <Button
+              variant="outline"
+              size="sm"
               disabled={validCurrentPage === 1}
               onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-              className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 disabled:opacity-40 disabled:pointer-events-none transition-all flex items-center gap-1"
+              className="h-11 min-h-[44px] px-4 font-semibold text-sm bg-white border-border gap-1"
             >
-              <ChevronLeft className="w-3.5 h-3.5" /> Anterior
-            </button>
+              <ChevronLeft className="w-4 h-4" /> Anterior
+            </Button>
 
-            <span className="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 font-extrabold text-white">
+            <span className="px-4 py-2 rounded-xl bg-white border border-border font-extrabold text-foreground text-sm">
               Página {validCurrentPage} de {totalPages}
             </span>
 
-            <button
+            <Button
+              variant="outline"
+              size="sm"
               disabled={validCurrentPage >= totalPages}
               onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
-              className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 disabled:opacity-40 disabled:pointer-events-none transition-all flex items-center gap-1"
+              className="h-11 min-h-[44px] px-4 font-semibold text-sm bg-white border-border gap-1"
             >
-              Siguiente <ChevronRight className="w-3.5 h-3.5" />
-            </button>
+              Siguiente <ChevronRight className="w-4 h-4" />
+            </Button>
           </div>
         </div>
-      </div>
+      </Card>
 
       {/* Modal Reasignar Promotor */}
       {clientToReassign && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="glass-panel w-full max-w-md p-6 rounded-2xl border border-slate-800 shadow-2xl space-y-4">
-            <h3 className="text-lg font-extrabold text-white flex items-center gap-2">
-              <UserCog className="w-5 h-5 text-emerald-400" />
-              Asignación / Reasignación de Promotor
-            </h3>
-            <p className="text-xs text-slate-400">
-              Cliente: <strong className="text-white">{clientToReassign.nombre}</strong>
+        <div
+          className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4"
+          onClick={(e) => {
+            // Regla estricta: No cerrar modal al hacer click en el backdrop
+            e.stopPropagation();
+          }}
+        >
+          <div
+            className="bg-card text-card-foreground w-full max-w-md p-6 rounded-2xl border border-border shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center pb-2 border-b border-border">
+              <h3 className="text-xl font-extrabold text-foreground flex items-center gap-2">
+                <UserCog className="w-6 h-6 text-primary" />
+                Asignación de Promotor
+              </h3>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                disabled={isReassigning}
+                onClick={() => setClientToReassign(null)}
+                className="h-11 w-11 min-h-[44px] min-w-[44px] text-muted-foreground hover:text-foreground hover:bg-slate-100 rounded-xl"
+                title="Cerrar modal (Esc)"
+              >
+                <X className="w-5 h-5" />
+              </Button>
+            </div>
+
+            <p className="text-sm text-muted-foreground">
+              Cliente: <strong className="text-foreground">{clientToReassign.nombre}</strong>
             </p>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">
+              <label className="block text-sm font-semibold text-foreground mb-1.5">
                 Selecciona Promotor Responsable
               </label>
               <select
                 value={selectedNewPromotorId}
                 onChange={(e) => setSelectedNewPromotorId(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500"
+                className="w-full h-12 min-h-[44px] px-4 py-2 rounded-xl border border-input bg-white text-foreground text-base font-medium focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 transition-colors"
               >
                 <option value="">Sin Asignar</option>
                 {activePromotores.map((p) => (
@@ -876,29 +925,30 @@ export default function ClientsPage() {
               </select>
             </div>
 
-            <div className="pt-3 flex justify-end gap-3 border-t border-slate-800">
-              <button
+            <div className="pt-3 flex justify-end gap-3 border-t border-border">
+              <Button
                 type="button"
+                variant="outline"
                 disabled={isReassigning}
                 onClick={() => setClientToReassign(null)}
-                className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-semibold text-xs disabled:opacity-50"
+                className="h-12 min-h-[44px] px-5 font-semibold text-base"
               >
                 Cancelar
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
                 disabled={isReassigning}
                 onClick={handleConfirmReassign}
-                className="px-5 py-2 rounded-xl bg-emerald-500 text-slate-950 font-black text-xs shadow-lg shadow-emerald-500/20 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="h-12 min-h-[44px] px-6 font-bold text-base bg-primary hover:bg-primary/90 text-primary-foreground flex items-center gap-2"
               >
                 {isReassigning ? (
                   <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" /> Guardando...
+                    <Loader2 className="w-4 h-4 animate-spin" /> Guardando...
                   </>
                 ) : (
                   'Guardar Cambios'
                 )}
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -906,74 +956,86 @@ export default function ClientsPage() {
 
       {/* Modal Registro o Edición de Cliente */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-4">
-          <div ref={modalScrollRef} className="glass-panel w-full max-w-2xl p-6 rounded-2xl border border-slate-800 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center pb-2 border-b border-slate-800">
+        <div
+          className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4"
+          onClick={(e) => {
+            // Regla estricta: No cerrar modal al hacer click en el backdrop
+            e.stopPropagation();
+          }}
+        >
+          <div
+            ref={modalScrollRef}
+            className="bg-card text-card-foreground w-full max-w-3xl p-6 md:p-8 rounded-2xl border border-border shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-start pb-3 border-b border-border">
               <div>
-                <h2 className="text-xl font-extrabold text-white flex items-center gap-2">
+                <h2 className="text-2xl font-extrabold text-foreground flex items-center gap-2.5">
                   {editingClientId ? (
                     <>
-                      <Edit3 className="w-6 h-6 text-amber-400" />
+                      <Edit3 className="w-7 h-7 text-amber-600" />
                       Editar Expediente de Cliente
                     </>
                   ) : (
                     <>
-                      <UserPlus className="w-6 h-6 text-emerald-400" />
+                      <UserPlus className="w-7 h-7 text-primary" />
                       Alta de Nuevo Cliente
                     </>
                   )}
                 </h2>
-                <p className="text-xs text-slate-400 mt-0.5">
+                <p className="text-base text-muted-foreground mt-1">
                   {editingClientId
                     ? 'Modificación de expediente por perfil de Administrador.'
                     : 'Captura de expediente completo con las mismas validaciones que un colaborador.'}
                 </p>
               </div>
 
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="icon"
                 disabled={isSubmitting}
                 onClick={() => setIsModalOpen(false)}
-                className="text-slate-400 hover:text-white p-1 text-base disabled:opacity-30"
+                className="h-11 w-11 min-h-[44px] min-w-[44px] text-muted-foreground hover:text-foreground hover:bg-slate-100 rounded-xl"
                 title="Cerrar modal (Esc)"
               >
-                ✕
-              </button>
+                <X className="w-5 h-5" />
+              </Button>
             </div>
 
             {/* Error Banner */}
             {errorMsg && (
-              <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/40 text-rose-300 text-xs font-semibold flex items-center gap-2.5 shadow-lg shadow-rose-500/10">
-                <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+              <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 text-base font-semibold flex items-center gap-3">
+                <AlertCircle className="w-5 h-5 shrink-0 text-rose-700" />
                 <span>{errorMsg}</span>
               </div>
             )}
 
-            <form onSubmit={handleCreateOrUpdateClient} noValidate className="space-y-4 text-xs">
+            <form onSubmit={handleCreateOrUpdateClient} noValidate className="space-y-6">
               {/* Sección 1: Datos Personales e Identificación */}
-              <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 space-y-3">
-                <h3 className="text-xs font-extrabold text-white uppercase tracking-wider flex items-center gap-1.5">
-                  <UserIcon className="w-4 h-4 text-white stroke-[2.5]" />
+              <div className="p-5 rounded-xl bg-slate-50 border border-border space-y-4">
+                <h3 className="text-sm font-extrabold text-foreground uppercase tracking-wider flex items-center gap-2">
+                  <UserIcon className="w-5 h-5 text-primary stroke-[2.5]" />
                   1. Datos Personales & Identificación
                 </h3>
 
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Nombre Completo *</label>
-                  <input
+                  <label className="block text-foreground font-semibold mb-1.5 text-base">Nombre Completo *</label>
+                  <Input
                     type="text"
                     required
                     disabled={isSubmitting}
                     placeholder="Ej: María de los Ángeles Mendoza"
                     value={nombre}
                     onChange={(e) => setNombre(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm focus:outline-none focus:border-emerald-500 disabled:opacity-50"
+                    className="h-12 text-base bg-white"
                   />
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div>
-                    <label className="block text-slate-300 font-semibold mb-1">CURP (18 caracteres) *</label>
-                    <input
+                    <label className="block text-foreground font-semibold mb-1.5 text-base">CURP (18 caracteres) *</label>
+                    <Input
                       type="text"
                       required
                       maxLength={18}
@@ -981,13 +1043,13 @@ export default function ClientsPage() {
                       placeholder="HEJS920415MDFRZZ01"
                       value={curp}
                       onChange={(e) => setCurp(e.target.value.toUpperCase())}
-                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs uppercase font-mono focus:outline-none focus:border-emerald-500 disabled:opacity-50"
+                      className="h-12 text-base uppercase font-mono bg-white"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-slate-300 font-semibold mb-1">RFC (13 caracteres) *</label>
-                    <input
+                    <label className="block text-foreground font-semibold mb-1.5 text-base">RFC (13 caracteres) *</label>
+                    <Input
                       type="text"
                       required
                       maxLength={13}
@@ -995,13 +1057,13 @@ export default function ClientsPage() {
                       placeholder="HEJS920415AB1"
                       value={rfc}
                       onChange={(e) => setRfc(e.target.value.toUpperCase())}
-                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs uppercase font-mono focus:outline-none focus:border-emerald-500 disabled:opacity-50"
+                      className="h-12 text-base uppercase font-mono bg-white"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-slate-300 font-semibold mb-1">Clave / Folio INE *</label>
-                    <input
+                    <label className="block text-foreground font-semibold mb-1.5 text-base">Clave / Folio INE *</label>
+                    <Input
                       type="text"
                       required
                       maxLength={18}
@@ -1009,15 +1071,15 @@ export default function ClientsPage() {
                       placeholder="Clave / Folio INE"
                       value={folioIne}
                       onChange={(e) => setFolioIne(e.target.value.toUpperCase())}
-                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs uppercase font-mono focus:outline-none focus:border-emerald-500 disabled:opacity-50"
+                      className="h-12 text-base uppercase font-mono bg-white"
                     />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-slate-300 font-semibold mb-1">Teléfono Móvil (10 dígitos) *</label>
-                    <input
+                    <label className="block text-foreground font-semibold mb-1.5 text-base">Teléfono Móvil (10 dígitos) *</label>
+                    <Input
                       type="tel"
                       required
                       maxLength={10}
@@ -1025,83 +1087,83 @@ export default function ClientsPage() {
                       placeholder="5512345678"
                       value={telefono}
                       onChange={(e) => setTelefono(onlyDigits(e.target.value, 10))}
-                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs font-mono focus:outline-none focus:border-emerald-500 disabled:opacity-50"
+                      className="h-12 text-base font-mono bg-white"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-slate-300 font-semibold mb-1">Correo Electrónico</label>
-                    <input
+                    <label className="block text-foreground font-semibold mb-1.5 text-base">Correo Electrónico</label>
+                    <Input
                       type="email"
                       disabled={isSubmitting}
                       placeholder="cliente@ejemplo.com"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500 disabled:opacity-50"
+                      className="h-12 text-base bg-white"
                     />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {isPromotor ? (
                     <div>
-                      <label className="block text-slate-300 font-semibold mb-1">
+                      <label className="block text-foreground font-semibold mb-1.5 text-base">
                         Promotor Asignado *
                       </label>
                       <div className="relative">
-                        <UserCheck className="w-4 h-4 text-white stroke-[2.5] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                        <input
+                        <UserCheck className="w-5 h-5 text-primary stroke-[2.5] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                        <Input
                           type="text"
                           readOnly
                           value={`${currentUser.name} (${currentUser.role})`}
-                          className="w-full pl-9 pr-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-extrabold text-xs cursor-not-allowed opacity-100"
+                          className="pl-11 h-12 text-base font-bold bg-slate-100 cursor-not-allowed"
                         />
                       </div>
                     </div>
                   ) : (
                     <div className="relative" ref={promotorDropdownRef}>
-                      <label className="block text-slate-300 font-semibold mb-1">
-                        Promotor Asignado <span className="text-slate-400 font-normal">(Opcional)</span>
+                      <label className="block text-foreground font-semibold mb-1.5 text-base">
+                        Promotor Asignado <span className="text-muted-foreground font-normal">(Opcional)</span>
                       </label>
                       <button
                         type="button"
                         disabled={isSubmitting}
                         onClick={() => setIsPromotorDropdownOpen(!isPromotorDropdownOpen)}
-                        className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs flex items-center justify-between focus:outline-none focus:border-emerald-500 disabled:opacity-50"
+                        className="w-full h-12 min-h-[44px] px-4 py-2 rounded-xl border border-input bg-white text-foreground text-base flex items-center justify-between focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 transition-colors disabled:opacity-50"
                       >
                         <span className="truncate">
                           {selectedPromotor ? `👤 ${selectedPromotor.name} (${selectedPromotor.role})` : 'Sin Asignar'}
                         </span>
-                        <ChevronDown className="w-4 h-4 text-slate-400 shrink-0 ml-2" />
+                        <ChevronDown className="w-5 h-5 text-muted-foreground shrink-0 ml-2" />
                       </button>
 
                       {isPromotorDropdownOpen && (
-                        <div className="absolute z-30 top-full left-0 right-0 mt-1 rounded-xl bg-slate-900 border border-slate-700 shadow-2xl overflow-hidden p-2 space-y-2">
+                        <div className="absolute z-30 top-full left-0 right-0 mt-1 rounded-xl bg-card border border-border shadow-2xl overflow-hidden p-2 space-y-2">
                           <div className="relative">
-                            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-                            <input
+                            <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+                            <Input
                               type="text"
                               autoFocus
                               placeholder="Buscar promotor por nombre..."
                               value={promotorSearchQuery}
                               onChange={(e) => setPromotorSearchQuery(e.target.value)}
-                              className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-white text-xs focus:outline-none focus:border-emerald-500"
+                              className="pl-9 h-10 text-sm bg-slate-50"
                             />
                           </div>
 
-                          <div className="max-h-40 overflow-y-auto space-y-1 divide-y divide-slate-800/50">
+                          <div className="max-h-48 overflow-y-auto space-y-1 divide-y divide-border/50">
                             <button
                               type="button"
                               onClick={() => {
                                 setPromotorAsignadoId('');
                                 setIsPromotorDropdownOpen(false);
                               }}
-                              className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs flex items-center justify-between transition-colors ${
-                                !promotorAsignadoId ? 'bg-emerald-500/20 text-emerald-300 font-bold' : 'text-slate-300 hover:bg-slate-800'
+                              className={`w-full text-left px-3 py-2 rounded-lg text-sm flex items-center justify-between transition-colors ${
+                                !promotorAsignadoId ? 'bg-primary/10 text-primary font-bold' : 'text-foreground hover:bg-slate-100'
                               }`}
                             >
                               <span>Sin Asignar</span>
-                              {!promotorAsignadoId && <Check className="w-3.5 h-3.5 text-emerald-400" />}
+                              {!promotorAsignadoId && <Check className="w-4 h-4 text-primary" />}
                             </button>
 
                             {filteredPromotoresList.map((p) => (
@@ -1112,19 +1174,19 @@ export default function ClientsPage() {
                                   setPromotorAsignadoId(p.id);
                                   setIsPromotorDropdownOpen(false);
                                 }}
-                                className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs flex items-center justify-between transition-colors ${
-                                  promotorAsignadoId === p.id ? 'bg-emerald-500/20 text-emerald-300 font-bold' : 'text-slate-300 hover:bg-slate-800'
+                                className={`w-full text-left px-3 py-2 rounded-lg text-sm flex items-center justify-between transition-colors ${
+                                  promotorAsignadoId === p.id ? 'bg-primary/10 text-primary font-bold' : 'text-foreground hover:bg-slate-100'
                                 }`}
                               >
                                 <div className="truncate">
-                                  👤 {p.name} <span className="text-[10px] text-slate-400">({p.role})</span>
+                                  👤 {p.name} <span className="text-xs text-muted-foreground">({p.role})</span>
                                 </div>
-                                {promotorAsignadoId === p.id && <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />}
+                                {promotorAsignadoId === p.id && <Check className="w-4 h-4 text-primary shrink-0" />}
                               </button>
                             ))}
 
                             {filteredPromotoresList.length === 0 && (
-                              <div className="px-2 py-2 text-center text-slate-500 text-[11px]">
+                              <div className="px-3 py-2 text-center text-muted-foreground text-sm">
                                 No se encontraron promotores.
                               </div>
                             )}
@@ -1135,12 +1197,12 @@ export default function ClientsPage() {
                   )}
 
                   <div>
-                    <label className="block text-slate-300 font-semibold mb-1">Score Crediticio Inicial</label>
+                    <label className="block text-foreground font-semibold mb-1.5 text-base">Score Crediticio Inicial</label>
                     <select
                       value={scoreCrediticio}
                       disabled={isSubmitting}
                       onChange={(e) => setScoreCrediticio(e.target.value as ScoreCrediticio)}
-                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500 disabled:opacity-50"
+                      className="w-full h-12 min-h-[44px] px-4 py-2 rounded-xl border border-input bg-white text-foreground text-base focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 transition-colors disabled:opacity-50"
                     >
                       <option value="Excelente">Excelente</option>
                       <option value="Bueno">Bueno</option>
@@ -1152,70 +1214,70 @@ export default function ClientsPage() {
               </div>
 
               {/* Sección 2: Dirección del Cliente */}
-              <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 space-y-3">
-                <h3 className="text-xs font-extrabold text-white uppercase tracking-wider flex items-center gap-1.5">
-                  <MapPin className="w-4 h-4 text-white stroke-[2.5]" />
+              <div className="p-5 rounded-xl bg-slate-50 border border-border space-y-4">
+                <h3 className="text-sm font-extrabold text-foreground uppercase tracking-wider flex items-center gap-2">
+                  <MapPin className="w-5 h-5 text-primary stroke-[2.5]" />
                   2. Dirección Particular
                 </h3>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div className="sm:col-span-2">
-                    <label className="block text-slate-300 font-semibold mb-1">Calle *</label>
-                    <input
+                    <label className="block text-foreground font-semibold mb-1.5 text-base">Calle *</label>
+                    <Input
                       type="text"
                       required
                       disabled={isSubmitting}
                       placeholder="Av. Revolución"
                       value={calle}
                       onChange={(e) => setCalle(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500 disabled:opacity-50"
+                      className="h-12 text-base bg-white"
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-slate-300 font-semibold mb-1">N° Ext *</label>
-                      <input
+                      <label className="block text-foreground font-semibold mb-1.5 text-base">N° Ext *</label>
+                      <Input
                         type="text"
                         required
                         disabled={isSubmitting}
                         placeholder="456"
                         value={numExterior}
                         onChange={(e) => setNumExterior(e.target.value)}
-                        className="w-full px-2 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500 disabled:opacity-50"
+                        className="h-12 text-base bg-white"
                       />
                     </div>
                     <div>
-                      <label className="block text-slate-300 font-semibold mb-1">N° Int</label>
-                      <input
+                      <label className="block text-foreground font-semibold mb-1.5 text-base">N° Int</label>
+                      <Input
                         type="text"
                         disabled={isSubmitting}
                         placeholder="B-3"
                         value={numInterior}
                         onChange={(e) => setNumInterior(e.target.value)}
-                        className="w-full px-2 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500 disabled:opacity-50"
+                        className="h-12 text-base bg-white"
                       />
                     </div>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div>
-                    <label className="block text-slate-300 font-semibold mb-1">Colonia *</label>
-                    <input
+                    <label className="block text-foreground font-semibold mb-1.5 text-base">Colonia *</label>
+                    <Input
                       type="text"
                       required
                       disabled={isSubmitting}
                       placeholder="Col. Condesa"
                       value={colonia}
                       onChange={(e) => setColonia(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500 disabled:opacity-50"
+                      className="h-12 text-base bg-white"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-slate-300 font-semibold mb-1">Código Postal (5 dígitos) *</label>
-                    <input
+                    <label className="block text-foreground font-semibold mb-1.5 text-base">Código Postal (5 dígitos) *</label>
+                    <Input
                       type="text"
                       required
                       maxLength={5}
@@ -1223,68 +1285,68 @@ export default function ClientsPage() {
                       placeholder="06140"
                       value={codigoPostal}
                       onChange={(e) => setCodigoPostal(onlyDigits(e.target.value, 5))}
-                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs font-mono focus:outline-none focus:border-emerald-500 disabled:opacity-50"
+                      className="h-12 text-base font-mono bg-white"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-slate-300 font-semibold mb-1">Ciudad / Municipio *</label>
-                    <input
+                    <label className="block text-foreground font-semibold mb-1.5 text-base">Ciudad / Municipio *</label>
+                    <Input
                       type="text"
                       required
                       disabled={isSubmitting}
                       placeholder="Ciudad de México"
                       value={ciudad}
                       onChange={(e) => setCiudad(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500 disabled:opacity-50"
+                      className="h-12 text-base bg-white"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Estado *</label>
-                  <input
+                  <label className="block text-foreground font-semibold mb-1.5 text-base">Estado *</label>
+                  <Input
                     type="text"
                     required
                     disabled={isSubmitting}
                     placeholder="CDMX"
                     value={estado}
                     onChange={(e) => setEstado(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500 disabled:opacity-50"
+                    className="h-12 text-base bg-white"
                   />
                 </div>
               </div>
 
               {/* Sección 3: Referencia Personal 1 */}
-              <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 space-y-3">
-                <h3 className="text-xs font-extrabold text-white uppercase tracking-wider flex items-center gap-1.5">
-                  <UserCheck className="w-4 h-4 text-white stroke-[2.5]" />
+              <div className="p-5 rounded-xl bg-slate-50 border border-border space-y-4">
+                <h3 className="text-sm font-extrabold text-foreground uppercase tracking-wider flex items-center gap-2">
+                  <UserCheck className="w-5 h-5 text-primary stroke-[2.5]" />
                   3. Referencia 1 (Obligatoria)
                 </h3>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-slate-300 font-semibold mb-1">Nombre Completo *</label>
-                    <input
+                    <label className="block text-foreground font-semibold mb-1.5 text-base">Nombre Completo *</label>
+                    <Input
                       type="text"
                       required
                       disabled={isSubmitting}
                       placeholder="Ej: Gonzalo Sánchez Ruiz"
                       value={ref1Nombre}
                       onChange={(e) => setRef1Nombre(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-indigo-500 disabled:opacity-50"
+                      className="h-12 text-base bg-white"
                     />
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-slate-300 font-semibold mb-1">Parentesco *</label>
+                      <label className="block text-foreground font-semibold mb-1.5 text-base">Parentesco *</label>
                       <select
                         required
                         disabled={isSubmitting}
                         value={ref1Parentesco}
                         onChange={(e) => setRef1Parentesco(e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-indigo-500 disabled:opacity-50"
+                        className="w-full h-12 min-h-[44px] px-4 py-2 rounded-xl border border-input bg-white text-foreground text-base focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 transition-colors disabled:opacity-50"
                       >
                         <option value="Familiar">Familiar</option>
                         <option value="Amigo">Amigo</option>
@@ -1293,8 +1355,8 @@ export default function ClientsPage() {
                       </select>
                     </div>
                     <div>
-                      <label className="block text-slate-300 font-semibold mb-1">Teléfono (10 dígitos) *</label>
-                      <input
+                      <label className="block text-foreground font-semibold mb-1.5 text-base">Teléfono (10 dígitos) *</label>
+                      <Input
                         type="tel"
                         required
                         maxLength={10}
@@ -1302,76 +1364,76 @@ export default function ClientsPage() {
                         placeholder="5511223344"
                         value={ref1Telefono}
                         onChange={(e) => setRef1Telefono(onlyDigits(e.target.value, 10))}
-                        className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs font-mono focus:outline-none focus:border-indigo-500 disabled:opacity-50"
+                        className="h-12 text-base font-mono bg-white"
                       />
                     </div>
                   </div>
                 </div>
 
                 {/* Dirección Estructurada Referencia 1 */}
-                <div className="pt-2 border-t border-slate-800/80 space-y-3">
-                  <label className="block text-[11px] font-bold text-indigo-300 uppercase tracking-wider">
+                <div className="pt-3 border-t border-border space-y-4">
+                  <label className="block text-sm font-bold text-foreground uppercase tracking-wider">
                     Dirección de Referencia 1 *
                   </label>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div className="sm:col-span-2">
-                      <label className="block text-slate-300 font-semibold mb-1">Calle *</label>
-                      <input
+                      <label className="block text-foreground font-semibold mb-1.5 text-base">Calle *</label>
+                      <Input
                         type="text"
                         required
                         disabled={isSubmitting}
                         placeholder="Calle principal"
                         value={ref1Calle}
                         onChange={(e) => setRef1Calle(e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-indigo-500 disabled:opacity-50"
+                        className="h-12 text-base bg-white"
                       />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="block text-slate-300 font-semibold mb-1">N° Ext *</label>
-                        <input
+                        <label className="block text-foreground font-semibold mb-1.5 text-base">N° Ext *</label>
+                        <Input
                           type="text"
                           required
                           disabled={isSubmitting}
                           placeholder="Ext"
                           value={ref1NumExterior}
                           onChange={(e) => setRef1NumExterior(e.target.value)}
-                          className="w-full px-2 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-indigo-500 disabled:opacity-50"
+                          className="h-12 text-base bg-white"
                         />
                       </div>
                       <div>
-                        <label className="block text-slate-300 font-semibold mb-1">N° Int</label>
-                        <input
+                        <label className="block text-foreground font-semibold mb-1.5 text-base">N° Int</label>
+                        <Input
                           type="text"
                           disabled={isSubmitting}
                           placeholder="Int"
                           value={ref1NumInterior}
                           onChange={(e) => setRef1NumInterior(e.target.value)}
-                          className="w-full px-2 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-indigo-500 disabled:opacity-50"
+                          className="h-12 text-base bg-white"
                         />
                       </div>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div>
-                      <label className="block text-slate-300 font-semibold mb-1">Colonia *</label>
-                      <input
+                      <label className="block text-foreground font-semibold mb-1.5 text-base">Colonia *</label>
+                      <Input
                         type="text"
                         required
                         disabled={isSubmitting}
                         placeholder="Colonia"
                         value={ref1Colonia}
                         onChange={(e) => setRef1Colonia(e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-indigo-500 disabled:opacity-50"
+                        className="h-12 text-base bg-white"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-slate-300 font-semibold mb-1">C.P. (5 dígitos) *</label>
-                      <input
+                      <label className="block text-foreground font-semibold mb-1.5 text-base">C.P. (5 dígitos) *</label>
+                      <Input
                         type="text"
                         required
                         maxLength={5}
@@ -1379,69 +1441,69 @@ export default function ClientsPage() {
                         placeholder="00000"
                         value={ref1CodigoPostal}
                         onChange={(e) => setRef1CodigoPostal(onlyDigits(e.target.value, 5))}
-                        className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs font-mono focus:outline-none focus:border-indigo-500 disabled:opacity-50"
+                        className="h-12 text-base font-mono bg-white"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-slate-300 font-semibold mb-1">Ciudad / Mpio *</label>
-                      <input
+                      <label className="block text-foreground font-semibold mb-1.5 text-base">Ciudad / Mpio *</label>
+                      <Input
                         type="text"
                         required
                         disabled={isSubmitting}
                         placeholder="Ciudad"
                         value={ref1Ciudad}
                         onChange={(e) => setRef1Ciudad(e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-indigo-500 disabled:opacity-50"
+                        className="h-12 text-base bg-white"
                       />
                     </div>
                   </div>
 
                   <div>
-                    <label className="block text-slate-300 font-semibold mb-1">Estado *</label>
-                    <input
+                    <label className="block text-foreground font-semibold mb-1.5 text-base">Estado *</label>
+                    <Input
                       type="text"
                       required
                       disabled={isSubmitting}
                       placeholder="Estado"
                       value={ref1Estado}
                       onChange={(e) => setRef1Estado(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-indigo-500 disabled:opacity-50"
+                      className="h-12 text-base bg-white"
                     />
                   </div>
                 </div>
               </div>
 
               {/* Sección 4: Referencia Personal 2 */}
-              <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 space-y-3">
-                <h3 className="text-xs font-extrabold text-white uppercase tracking-wider flex items-center gap-1.5">
-                  <UserCheck className="w-4 h-4 text-white stroke-[2.5]" />
+              <div className="p-5 rounded-xl bg-slate-50 border border-border space-y-4">
+                <h3 className="text-sm font-extrabold text-foreground uppercase tracking-wider flex items-center gap-2">
+                  <UserCheck className="w-5 h-5 text-primary stroke-[2.5]" />
                   4. Referencia 2 (Obligatoria)
                 </h3>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-slate-300 font-semibold mb-1">Nombre Completo *</label>
-                    <input
+                    <label className="block text-foreground font-semibold mb-1.5 text-base">Nombre Completo *</label>
+                    <Input
                       type="text"
                       required
                       disabled={isSubmitting}
                       placeholder="Ej: Lorena Fernández Vega"
                       value={ref2Nombre}
                       onChange={(e) => setRef2Nombre(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-violet-500 disabled:opacity-50"
+                      className="h-12 text-base bg-white"
                     />
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-slate-300 font-semibold mb-1">Parentesco *</label>
+                      <label className="block text-foreground font-semibold mb-1.5 text-base">Parentesco *</label>
                       <select
                         required
                         disabled={isSubmitting}
                         value={ref2Parentesco}
                         onChange={(e) => setRef2Parentesco(e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-violet-500 disabled:opacity-50"
+                        className="w-full h-12 min-h-[44px] px-4 py-2 rounded-xl border border-input bg-white text-foreground text-base focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 transition-colors disabled:opacity-50"
                       >
                         <option value="Familiar">Familiar</option>
                         <option value="Amigo">Amigo</option>
@@ -1450,8 +1512,8 @@ export default function ClientsPage() {
                       </select>
                     </div>
                     <div>
-                      <label className="block text-slate-300 font-semibold mb-1">Teléfono (10 dígitos) *</label>
-                      <input
+                      <label className="block text-foreground font-semibold mb-1.5 text-base">Teléfono (10 dígitos) *</label>
+                      <Input
                         type="tel"
                         required
                         maxLength={10}
@@ -1459,76 +1521,76 @@ export default function ClientsPage() {
                         placeholder="5566778899"
                         value={ref2Telefono}
                         onChange={(e) => setRef2Telefono(onlyDigits(e.target.value, 10))}
-                        className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs font-mono focus:outline-none focus:border-violet-500 disabled:opacity-50"
+                        className="h-12 text-base font-mono bg-white"
                       />
                     </div>
                   </div>
                 </div>
 
                 {/* Dirección Estructurada Referencia 2 */}
-                <div className="pt-2 border-t border-slate-800/80 space-y-3">
-                  <label className="block text-[11px] font-bold text-violet-300 uppercase tracking-wider">
+                <div className="pt-3 border-t border-border space-y-4">
+                  <label className="block text-sm font-bold text-foreground uppercase tracking-wider">
                     Dirección de Referencia 2 *
                   </label>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div className="sm:col-span-2">
-                      <label className="block text-slate-300 font-semibold mb-1">Calle *</label>
-                      <input
+                      <label className="block text-foreground font-semibold mb-1.5 text-base">Calle *</label>
+                      <Input
                         type="text"
                         required
                         disabled={isSubmitting}
                         placeholder="Calle principal"
                         value={ref2Calle}
                         onChange={(e) => setRef2Calle(e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-violet-500 disabled:opacity-50"
+                        className="h-12 text-base bg-white"
                       />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="block text-slate-300 font-semibold mb-1">N° Ext *</label>
-                        <input
+                        <label className="block text-foreground font-semibold mb-1.5 text-base">N° Ext *</label>
+                        <Input
                           type="text"
                           required
                           disabled={isSubmitting}
                           placeholder="Ext"
                           value={ref2NumExterior}
                           onChange={(e) => setRef2NumExterior(e.target.value)}
-                          className="w-full px-2 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-violet-500 disabled:opacity-50"
+                          className="h-12 text-base bg-white"
                         />
                       </div>
                       <div>
-                        <label className="block text-slate-300 font-semibold mb-1">N° Int</label>
-                        <input
+                        <label className="block text-foreground font-semibold mb-1.5 text-base">N° Int</label>
+                        <Input
                           type="text"
                           disabled={isSubmitting}
                           placeholder="Int"
                           value={ref2NumInterior}
                           onChange={(e) => setRef2NumInterior(e.target.value)}
-                          className="w-full px-2 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-violet-500 disabled:opacity-50"
+                          className="h-12 text-base bg-white"
                         />
                       </div>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div>
-                      <label className="block text-slate-300 font-semibold mb-1">Colonia *</label>
-                      <input
+                      <label className="block text-foreground font-semibold mb-1.5 text-base">Colonia *</label>
+                      <Input
                         type="text"
                         required
                         disabled={isSubmitting}
                         placeholder="Colonia"
                         value={ref2Colonia}
                         onChange={(e) => setRef2Colonia(e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-violet-500 disabled:opacity-50"
+                        className="h-12 text-base bg-white"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-slate-300 font-semibold mb-1">C.P. (5 dígitos) *</label>
-                      <input
+                      <label className="block text-foreground font-semibold mb-1.5 text-base">C.P. (5 dígitos) *</label>
+                      <Input
                         type="text"
                         required
                         maxLength={5}
@@ -1536,68 +1598,69 @@ export default function ClientsPage() {
                         placeholder="00000"
                         value={ref2CodigoPostal}
                         onChange={(e) => setRef2CodigoPostal(onlyDigits(e.target.value, 5))}
-                        className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs font-mono focus:outline-none focus:border-violet-500 disabled:opacity-50"
+                        className="h-12 text-base font-mono bg-white"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-slate-300 font-semibold mb-1">Ciudad / Mpio *</label>
-                      <input
+                      <label className="block text-foreground font-semibold mb-1.5 text-base">Ciudad / Mpio *</label>
+                      <Input
                         type="text"
                         required
                         disabled={isSubmitting}
                         placeholder="Ciudad"
                         value={ref2Ciudad}
                         onChange={(e) => setRef2Ciudad(e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-violet-500 disabled:opacity-50"
+                        className="h-12 text-base bg-white"
                       />
                     </div>
                   </div>
 
                   <div>
-                    <label className="block text-slate-300 font-semibold mb-1">Estado *</label>
-                    <input
+                    <label className="block text-foreground font-semibold mb-1.5 text-base">Estado *</label>
+                    <Input
                       type="text"
                       required
                       disabled={isSubmitting}
                       placeholder="Estado"
                       value={ref2Estado}
                       onChange={(e) => setRef2Estado(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-violet-500 disabled:opacity-50"
+                      className="h-12 text-base bg-white"
                     />
                   </div>
                 </div>
               </div>
 
               {/* Modal Actions */}
-              <div className="pt-3 flex items-center justify-end gap-3 border-t border-slate-800">
-                <button
+              <div className="pt-4 flex items-center justify-end gap-3 border-t border-border">
+                <Button
                   type="button"
+                  variant="outline"
                   disabled={isSubmitting}
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 font-semibold text-xs transition-all disabled:opacity-50"
+                  className="h-12 min-h-[44px] px-6 text-base font-semibold"
                 >
                   Cancelar
-                </button>
-                <button
+                </Button>
+                <Button
                   type="submit"
                   disabled={isSubmitting}
-                  className={`px-5 py-2 rounded-xl text-slate-950 font-black text-xs shadow-lg transition-all flex items-center gap-2 disabled:opacity-50 ${
+                  className={`h-12 min-h-[44px] px-8 text-base font-bold shadow-sm flex items-center gap-2 ${
                     editingClientId
-                      ? 'bg-amber-500 hover:bg-amber-400 shadow-amber-500/20'
-                      : 'bg-emerald-500 hover:bg-emerald-400 shadow-emerald-500/20'
+                      ? 'bg-amber-600 hover:bg-amber-700 text-white'
+                      : 'bg-primary hover:bg-primary/90 text-primary-foreground'
                   }`}
                 >
                   {isSubmitting ? (
                     <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Guardando...
+                      <Loader2 className="w-4 h-4 animate-spin" /> Guardando...
                     </>
                   ) : editingClientId ? (
                     'Guardar Cambios'
                   ) : (
                     'Guardar Cliente'
                   )}
-                </button>
+                </Button>
               </div>
             </form>
           </div>
