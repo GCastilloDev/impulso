@@ -5,6 +5,10 @@ import { useRouter } from 'next/navigation';
 import { TrendingUp, ShieldCheck, ArrowRight, AlertCircle, KeyRound, User, Loader2, Eye, EyeOff } from 'lucide-react';
 import { useImpulsoStore } from '@/store/useImpulsoStore';
 import { loginAction } from '@/app/actions/authActions';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -54,7 +58,7 @@ export default function LoginPage() {
       } else {
         setErrorMsg(storeResult.message);
       }
-    } catch (err: any) {
+    } catch (_err: unknown) {
       const storeResult = login(selectedEmail, password);
       if (storeResult.success && storeResult.user) {
         if (storeResult.user.role === 'Promotor de Campo') {
@@ -71,103 +75,125 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#090d16] flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Background Glows */}
-      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-emerald-500/10 rounded-full blur-[120px] pointer-events-none" />
-      <div className="absolute bottom-10 right-10 w-[350px] h-[350px] bg-indigo-500/10 rounded-full blur-[100px] pointer-events-none" />
-
-      <div className="w-full max-w-md relative z-10">
+    <div className="min-h-screen bg-background flex items-center justify-center p-4 md:p-6">
+      <div className="w-full max-w-md">
         {/* Brand Header */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-400 text-slate-950 shadow-xl shadow-emerald-500/20 mb-4 font-black">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary text-primary-foreground shadow-md mb-4 font-black">
             <TrendingUp className="w-9 h-9" />
           </div>
-          <h1 className="text-3xl font-extrabold text-white tracking-tight">FINANCIERA IMPULSO</h1>
-          <p className="text-xs text-emerald-400 font-semibold mt-1">
+          <h1 className="text-3xl font-extrabold text-foreground tracking-tight">
+            FINANCIERA IMPULSO
+          </h1>
+          <p className="text-base text-muted-foreground font-semibold mt-1">
             Sistema de Gestión de Préstamos & Cobranza
           </p>
-          <span className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-            <ShieldCheck className="w-3.5 h-3.5" /> Acceso Seguro al Sistema
-          </span>
+          <div className="mt-3 flex justify-center">
+            <Badge variant="success" className="gap-1.5 py-1 px-3.5 text-xs font-semibold">
+              <ShieldCheck className="w-4 h-4 text-emerald-700" />
+              <span>Acceso Seguro al Sistema</span>
+            </Badge>
+          </div>
         </div>
 
         {/* Login Form Container */}
-        <div className="glass-panel p-6 md:p-8 rounded-2xl border border-slate-800 shadow-2xl space-y-5">
-          <h2 className="text-lg font-bold text-white tracking-tight text-center">
-            Iniciar Sesión
-          </h2>
+        <Card className="border-border shadow-lg">
+          <CardHeader className="text-center pb-2">
+            <CardTitle className="text-2xl font-bold text-foreground">
+              Iniciar Sesión
+            </CardTitle>
+            <CardDescription className="text-base text-muted-foreground">
+              Ingresa tus credenciales para acceder a la plataforma
+            </CardDescription>
+          </CardHeader>
 
-          {errorMsg && (
-            <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/40 text-rose-300 text-xs font-semibold flex items-center gap-2.5 shadow-lg shadow-rose-500/10">
-              <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
-              <span>{errorMsg}</span>
-            </div>
-          )}
-
-          <form onSubmit={handleLoginSubmit} className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
-                Correo Electrónico
-              </label>
-              <div className="relative">
-                <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                <input
-                  type="email"
-                  required
-                  disabled={isLoading}
-                  value={selectedEmail}
-                  onChange={(e) => setSelectedEmail(e.target.value)}
-                  placeholder="usuario@financieraimpulso.com"
-                  className="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-900/80 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500 disabled:opacity-50"
-                />
+          <CardContent className="space-y-5 pt-4">
+            {errorMsg && (
+              <div
+                role="alert"
+                className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-destructive text-sm font-semibold flex items-center gap-2.5 shadow-xs"
+              >
+                <AlertCircle className="w-5 h-5 shrink-0 text-destructive" />
+                <span>{errorMsg}</span>
               </div>
-            </div>
+            )}
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
-                Contraseña
-              </label>
-              <div className="relative">
-                <KeyRound className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  required
-                  disabled={isLoading}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full pl-10 pr-10 py-3 rounded-xl bg-slate-900/80 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500 font-mono disabled:opacity-50"
-                />
-                <button
-                  type="button"
-                  disabled={isLoading}
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
-                  title={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+            <form onSubmit={handleLoginSubmit} className="space-y-5">
+              <div>
+                <label
+                  htmlFor="email"
+                  className="block text-sm font-bold text-foreground uppercase tracking-wider mb-2"
                 >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
+                  Correo Electrónico
+                </label>
+                <div className="relative">
+                  <User className="w-5 h-5 text-muted-foreground absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <Input
+                    id="email"
+                    type="email"
+                    required
+                    disabled={isLoading}
+                    value={selectedEmail}
+                    onChange={(e) => setSelectedEmail(e.target.value)}
+                    placeholder="usuario@financieraimpulso.com"
+                    className="pl-11 h-12 text-base"
+                    autoComplete="email"
+                  />
+                </div>
               </div>
-            </div>
 
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="w-full flex items-center justify-center gap-2 py-3.5 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-sm shadow-xl shadow-emerald-500/20 transition-all group disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" /> Verificando...
-                </>
-              ) : (
-                <>
-                  Ingresar al Sistema
-                  <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                </>
-              )}
-            </button>
-          </form>
-        </div>
+              <div>
+                <label
+                  htmlFor="password"
+                  className="block text-sm font-bold text-foreground uppercase tracking-wider mb-2"
+                >
+                  Contraseña
+                </label>
+                <div className="relative">
+                  <KeyRound className="w-5 h-5 text-muted-foreground absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <Input
+                    id="password"
+                    type={showPassword ? 'text' : 'password'}
+                    required
+                    disabled={isLoading}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="pl-11 pr-12 h-12 text-base font-mono"
+                    autoComplete="current-password"
+                  />
+                  <button
+                    type="button"
+                    disabled={isLoading}
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-0 top-0 h-12 w-12 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-r-xl"
+                    aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                    title={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                  >
+                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  </button>
+                </div>
+              </div>
+
+              <Button
+                type="submit"
+                disabled={isLoading}
+                className="w-full h-12 text-base font-bold shadow-md"
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" /> Verificando...
+                  </>
+                ) : (
+                  <>
+                    <span>Ingresar al Sistema</span>
+                    <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                  </>
+                )}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
