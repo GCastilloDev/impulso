@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import { Sidebar } from '@/components/shared/Sidebar';
 import { Navbar } from '@/components/shared/Navbar';
@@ -30,14 +30,14 @@ export default function DashboardLayout({
 
   if (!hasMounted || !isAuthenticated) {
     return (
-      <div className="min-h-screen bg-[#090d16] flex items-center justify-center text-emerald-400">
+      <div className="min-h-screen bg-background flex items-center justify-center text-primary">
         <Loader2 className="w-8 h-8 animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#090d16] text-slate-100 flex flex-col antialiased">
+    <div className="min-h-screen bg-background text-foreground flex flex-col antialiased">
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       
       <div className="flex-1 md:pl-64 flex flex-col transition-all duration-300">

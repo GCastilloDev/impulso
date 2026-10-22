@@ -2,9 +2,11 @@
 
 import React from 'react';
 import { useRouter } from 'next/navigation';
-import { Menu, Database, Calendar, LogOut, ShieldCheck, UserCheck } from 'lucide-react';
+import { Menu, Calendar, LogOut, ShieldCheck, UserCheck } from 'lucide-react';
 import { useImpulsoStore } from '@/store/useImpulsoStore';
 import { formatDate } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 
 interface NavbarProps {
   onToggleSidebar: () => void;
@@ -21,20 +23,23 @@ export function Navbar({ onToggleSidebar }: NavbarProps) {
   };
 
   return (
-    <header className="sticky top-0 z-30 h-16 glass-panel border-b border-slate-800 px-4 md:px-6 flex items-center justify-between">
+    <header className="sticky top-0 z-30 h-16 bg-card border-b border-border px-4 md:px-6 flex items-center justify-between">
       <div className="flex items-center gap-3">
-        <button
+        <Button
+          variant="ghost"
+          size="icon"
           onClick={onToggleSidebar}
-          className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 md:hidden"
+          className="md:hidden text-foreground hover:bg-muted"
+          aria-label="Abrir menú"
         >
           <Menu className="w-5 h-5" />
-        </button>
+        </Button>
 
         <div className="flex items-center gap-2">
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-slate-800 text-slate-300">
-            <Calendar className="w-3.5 h-3.5 text-white" />
+          <Badge variant="outline" className="gap-2 px-3 py-1 text-sm font-semibold text-muted-foreground border-border bg-muted/50">
+            <Calendar className="w-4 h-4 text-foreground" />
             {formatDate(todayStr)}
-          </span>
+          </Badge>
         </div>
       </div>
 
@@ -44,32 +49,34 @@ export function Navbar({ onToggleSidebar }: NavbarProps) {
           <img
             src={currentUser.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200'}
             alt={currentUser.name}
-            className="w-8 h-8 rounded-full border border-emerald-500/40 object-cover"
+            className="w-9 h-9 rounded-full border border-border object-cover"
           />
           <div className="hidden sm:block text-left">
-            <p className="text-xs font-bold text-white leading-tight">{currentUser.name}</p>
-            <span
-              className={`text-[10px] font-semibold flex items-center gap-1 ${
-                currentUser.role === 'Administrador' ? 'text-emerald-400' : 'text-indigo-400'
-              }`}
+            <p className="text-sm font-bold text-foreground leading-tight">{currentUser.name}</p>
+            <Badge
+              variant={currentUser.role === 'Administrador' ? 'default' : 'secondary'}
+              className="text-xs font-semibold py-0 px-2 mt-0.5"
             >
               {currentUser.role === 'Administrador' ? (
-                <ShieldCheck className="w-3 h-3" />
+                <ShieldCheck className="w-3 h-3 mr-1" />
               ) : (
-                <UserCheck className="w-3 h-3" />
+                <UserCheck className="w-3 h-3 mr-1" />
               )}
               {currentUser.role}
-            </span>
+            </Badge>
           </div>
         </div>
 
-        <button
+        <Button
+          variant="ghost"
+          size="icon"
           onClick={handleLogout}
-          className="p-2 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800/80 transition-colors"
+          className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
           title="Cerrar Sesión"
+          aria-label="Cerrar Sesión"
         >
-          <LogOut className="w-4 h-4" />
-        </button>
+          <LogOut className="w-5 h-5" />
+        </Button>
       </div>
     </header>
   );

@@ -10,13 +10,14 @@ import {
   Smartphone,
   Settings,
   TrendingUp,
-  RotateCcw,
   LogOut,
   ShieldCheck,
   UserCheck,
   UserCog,
 } from 'lucide-react';
 import { useImpulsoStore } from '@/store/useImpulsoStore';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -26,7 +27,7 @@ interface SidebarProps {
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const { currentUser, resetToSeedData, logout } = useImpulsoStore();
+  const { currentUser, logout } = useImpulsoStore();
 
   const handleLogout = () => {
     logout();
@@ -82,48 +83,56 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       {/* Mobile Backdrop */}
       {isOpen && (
         <div
-          className="fixed inset-0 z-40 bg-slate-950/80 backdrop-blur-sm md:hidden"
+          className="fixed inset-0 z-40 bg-slate-900/50 backdrop-blur-xs md:hidden"
           onClick={onClose}
         />
       )}
 
       <aside
-        className={`fixed top-0 left-0 z-50 h-full w-64 glass-panel border-r border-slate-800 flex flex-col justify-between transition-transform duration-300 ease-in-out md:translate-x-0 ${
+        className={`fixed top-0 left-0 z-50 h-full w-64 bg-card border-r border-border flex flex-col justify-between transition-transform duration-300 ease-in-out md:translate-x-0 ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
         <div>
           {/* Brand Header */}
-          <div className="p-5 border-b border-slate-800/80 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center shadow-lg shadow-emerald-500/20 text-slate-950 font-black">
-              <TrendingUp className="w-6 h-6 text-slate-950" />
+          <div className="p-5 border-b border-border flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center text-primary-foreground shadow-xs font-black">
+              <TrendingUp className="w-6 h-6 text-primary-foreground" />
             </div>
             <div>
-              <h1 className="font-extrabold text-lg tracking-tight text-white flex items-center gap-1">
+              <h1 className="font-extrabold text-lg tracking-tight text-foreground flex items-center gap-1">
                 IMPULSO
               </h1>
-              <p className="text-xs text-slate-400 font-medium">Gestión & Cobranza</p>
+              <p className="text-xs text-muted-foreground font-semibold">Gestión & Cobranza</p>
             </div>
           </div>
 
           {/* User Profile Card */}
-          <div className="p-4 mx-3 my-3 rounded-xl bg-slate-900/60 border border-slate-800 flex items-center gap-3">
+          <div className="p-3 mx-3 my-3 rounded-xl bg-muted/60 border border-border flex items-center gap-3">
             <img
               src={currentUser.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200'}
               alt={currentUser.name}
-              className="w-9 h-9 rounded-full border border-emerald-500/30 object-cover"
+              className="w-10 h-10 rounded-full border border-border object-cover"
             />
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold text-white truncate">{currentUser.name}</p>
-              <p className="text-[11px] text-emerald-400 font-medium flex items-center gap-1">
-                ● {currentUser.role}
-              </p>
+              <p className="text-sm font-bold text-foreground truncate">{currentUser.name}</p>
+              <Badge
+                variant={isAdmin ? 'default' : 'secondary'}
+                className="text-xs font-semibold py-0 px-2 mt-0.5"
+              >
+                {isAdmin ? (
+                  <ShieldCheck className="w-3 h-3 mr-1" />
+                ) : (
+                  <UserCheck className="w-3 h-3 mr-1" />
+                )}
+                {currentUser.role}
+              </Badge>
             </div>
           </div>
 
           {/* Navigation Links */}
           <nav className="px-3 space-y-1.5 mt-2">
-            <p className="px-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">
+            <p className="px-3 text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">
               Módulos del Sistema
             </p>
             {navItems.map((item) => {
@@ -135,14 +144,14 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                   key={item.href}
                   href={item.href}
                   onClick={onClose}
-                  className={`flex items-center justify-between px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                  className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all min-h-[44px] ${
                     isActive
-                      ? 'bg-gradient-to-r from-emerald-500/20 to-teal-500/10 text-emerald-400 border border-emerald-500/30 shadow-md shadow-emerald-500/5 font-semibold'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                      ? 'bg-muted text-foreground border border-border shadow-2xs font-bold'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/60 border border-transparent'
                   }`}
                 >
                   <div className="flex items-center gap-3">
-                    <Icon className={`w-4 h-4 ${isActive ? 'text-emerald-400' : 'text-slate-400'}`} />
+                    <Icon className={`w-5 h-5 ${isActive ? 'text-primary' : 'text-muted-foreground'}`} />
                     <span>{item.name}</span>
                   </div>
                 </Link>
@@ -152,14 +161,15 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         </div>
 
         {/* Footer Actions */}
-        <div className="p-3 border-t border-slate-800/80">
-          <button
+        <div className="p-3 border-t border-border">
+          <Button
+            variant="outline"
             onClick={handleLogout}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 transition-all"
+            className="w-full h-11 text-destructive border-border hover:bg-destructive hover:text-destructive-foreground hover:border-destructive font-semibold justify-center gap-2"
           >
-            <LogOut className="w-3.5 h-3.5" />
+            <LogOut className="w-4 h-4" />
             Cerrar Sesión
-          </button>
+          </Button>
         </div>
       </aside>
     </>
