@@ -16,14 +16,14 @@ Financiera Impulso es una plataforma web para la administración y operación de
 
 ---
 
-## 3. Metodología de Trabajo: SDD (Spec-Driven Development)
-Todo cambio funcional o refactorización relevante debe seguir el flujo SDD:
-1. **Especificación (Spec):** Definir claramente la necesidad de negocio, impacto en el modelo de datos (`schema.prisma`), contratos de tipos (`src/types/index.ts`) y Server Actions antes de codificar.
-2. **Plan Atómico (Plan):** Desglosar el trabajo en tareas unitarias con orden lógico de dependencia.
-3. **Implementación:** Desarrollar componente por componente o acción por acción respetando las reglas de validación y UI existentes.
-4. **Verificación:** Validar tipos (`npx tsc --noEmit`), linting y lógica de negocio antes de dar por cerrada la tarea.
+## 3. Metodología de Trabajo: SDD (Spec-Driven Development) y Orquestación
+Todo trabajo en Financiera Impulso se clasifica y ejecuta mediante el protocolo SDD y equipo de agentes especializados:
+* **Funcionalidades Nuevas (Ciclo Completo SDD):** Documento formal en `docs/sdd/` con contratos y Grafo Acíclico Dirigido (Task DAG) para paralelizar subtareas en Herdr sin sobrecargar contexto.
+* **Micro-Fixes (Vía Rápida):** Ajustes menores de UI, texto o validaciones aisladas; despacho directo al subagente sin nuevo SDD + verificación de tipos (`tsc`) y commit `fix:`/`style:`.
+* **Fixes de Lógica y Financieros:** Análisis de impacto con CodeGraph (`codegraph impact`), actualización del SDD original en `docs/sdd/` como documento vivo (adenda) y auditoría obligatoria de `financial-core`.
+* **Mejoras y Refactors Evolutivos:** Versionado formal del SDD existente (`v1.0` -> `v1.1`) con actualización de su Grafo DAG.
 
-Consulte la skill en `.agents/skills/sdd-workflow/SKILL.md` para el protocolo completo.
+Consulte las skills en `.agents/skills/` (`sdd-workflow`, `sdd-spec`, `financial-core`, `ui-ux`, `fullstack-dev`, `code-review`, `security-audit`, `qa-testing`) para el protocolo detallado.
 
 ---
 
