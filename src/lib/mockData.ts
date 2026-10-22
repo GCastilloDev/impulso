@@ -5,14 +5,14 @@ import { getTodayDateString, addDays } from './utils';
 export const MOCK_USERS: User[] = [
   {
     id: 'usr-1',
-    name: 'Carlos Mendoza',
-    email: 'carlos.mendoza@financieraimpulso.com',
-    password: '123456',
+    name: 'Rosa Nelly Tellez',
+    email: 'rosanellytellez6@gmail.com',
+    password: 'Admin123$',
     role: 'Administrador',
-    telefono: '5511223344',
+    telefono: '5587654321',
     estatus: 'Activo',
-    fechaAlta: '2025-10-01',
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200',
+    fechaAlta: '2026-10-11',
+    avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=200',
   },
   {
     id: 'usr-2',
