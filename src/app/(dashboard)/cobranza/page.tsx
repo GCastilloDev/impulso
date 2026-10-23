@@ -10,20 +10,19 @@ import {
   Clock,
   Check,
   Search,
-  Filter,
   Loader2,
   ShieldCheck,
   Calendar,
   XCircle,
   FileText,
-  Layers,
   AlertCircle,
   Receipt,
+  RefreshCw,
 } from 'lucide-react';
 import { useImpulsoStore } from '@/store/useImpulsoStore';
-import { formatCurrency, formatDateWithDay, getTodayDateString } from '@/lib/utils';
+import { formatCurrency, formatDateWithDay, getTodayDateString, cn } from '@/lib/utils';
 import { calculateLateFeeForOverduePayments } from '@/lib/financialCalculators';
-import { AmortizationInstallment, FinancialProduct, Loan, PaymentRecord, CashClosure } from '@/types';
+import { AmortizationInstallment, FinancialProduct, Loan, PaymentRecord, CashClosure, EstadoCuota } from '@/types';
 import { registerPaymentAction, authorizePaymentAction, registerFailedVisitAction } from '@/app/actions/paymentActions';
 import { getClosurePreviewAction, createCashClosureAction, reconcileCashClosureAction } from '@/app/actions/closureActions';
 
@@ -46,6 +45,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog';
+import { InstallmentStatusBadge } from '@/components/shared/StatusBadges';
 
 interface CollectionItem {
   loan: Loan;
@@ -99,63 +99,19 @@ function getInstallmentLateFee(
   return 0;
 }
 
-/**
- * Badge accesible con contraste WCAG AAA para estados de cuotas
- */
-function RenderInstallmentBadge({ status }: { status: string }) {
-  switch (status) {
-    case 'Pagado':
-      return (
-        <Badge variant="success" className="gap-1.5 py-1 px-3 text-xs font-bold shrink-0">
-          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-800" />
-          <span>Pagado</span>
-        </Badge>
-      );
-    case 'Mora':
-    case 'Vencido':
-      return (
-        <Badge
-          variant="destructive"
-          className="gap-1.5 py-1 px-3 text-xs font-extrabold bg-rose-100 text-rose-900 border-rose-300 shadow-xs shrink-0"
-        >
-          <AlertTriangle className="w-3.5 h-3.5 text-rose-800" />
-          <span>En Mora</span>
-        </Badge>
-      );
-    case 'Parcial':
-      return (
-        <Badge variant="warning" className="gap-1.5 py-1 px-3 text-xs font-bold shrink-0">
-          <Clock className="w-3.5 h-3.5 text-amber-800" />
-          <span>Parcial</span>
-        </Badge>
-      );
-    case 'En Revisión':
-      return (
-        <Badge
-          variant="warning"
-          className="gap-1.5 py-1 px-3 text-xs font-bold bg-indigo-100 text-indigo-900 border-indigo-300 shrink-0"
-        >
-          <Clock className="w-3.5 h-3.5 text-indigo-800" />
-          <span>En Revisión</span>
-        </Badge>
-      );
-    case 'Pendiente':
-    default:
-      return (
-        <Badge
-          variant="outline"
-          className="gap-1.5 py-1 px-3 text-xs font-semibold text-muted-foreground border-border bg-muted/40 shrink-0"
-        >
-          <Clock className="w-3.5 h-3.5 text-muted-foreground" />
-          <span>Pendiente</span>
-        </Badge>
-      );
-  }
-}
-
 export default function CollectionPage() {
   const { loans, clients, users, products, payments, closures, currentUser, loadDataFromDB } = useImpulsoStore();
   const [isPageLoading, setIsPageLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await loadDataFromDB();
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -322,6 +278,26 @@ export default function CollectionPage() {
 
   const pendingAuthorizations = payments.filter((p) => p.estatus === 'Pendiente');
 
+  // Cálculos de métricas rápidas de jornada
+  const cobradoHoyPayments = payments.filter(
+    (p) => p.fechaPago.startsWith(todayStr) || p.fechaCobroReal === todayStr
+  );
+  const totalCobradoHoy = cobradoHoyPayments.reduce((acc, p) => acc + p.montoRecibido, 0);
+  const cantidadRecibosHoy = cobradoHoyPayments.length;
+
+  const cuotasRutaPendientes = collectionList.filter(
+    (i) => (i.isToday || i.isOverdue || i.installment.estado === 'Parcial') && i.installment.estado !== 'Pagado'
+  );
+  const totalPorCobrarHoy = cuotasRutaPendientes.reduce((acc, i) => {
+    const cuotaFaltante = Math.round((i.installment.cuotaTotal - (i.installment.montoPagado || 0)) * 100) / 100;
+    const recargo = getInstallmentLateFee(i.installment, i.loan, products, todayStr);
+    return acc + cuotaFaltante + (i.isOverdue ? recargo : 0);
+  }, 0);
+
+  const cuotasEnMoraCount = collectionList.filter(
+    (i) => i.isOverdue && i.installment.estado !== 'Pagado' && i.installment.estado !== 'Parcial'
+  ).length;
+
   const filteredCollection = collectionList.filter((item) => {
     // 1. Filtro por Búsqueda (Cliente o Folio)
     const matchesSearch =
@@ -368,7 +344,6 @@ export default function CollectionPage() {
   const openPaymentModal = (item: CollectionItem) => {
     setSelectedItem(item);
     const cuotaFaltante = Math.round((item.installment.cuotaTotal - item.installment.montoPagado) * 100) / 100;
-    // Cálculo dinámico de mora desde el producto real del préstamo
     const recargoMora = getInstallmentLateFee(item.installment, item.loan, products, todayStr);
 
     setMontoRecibido(Math.round((cuotaFaltante + recargoMora) * 100) / 100);
@@ -376,7 +351,6 @@ export default function CollectionPage() {
     setMetodoPago('Efectivo');
     setNota('');
     setEsCobroExtemporaneo(false);
-    // Para cobro extemporáneo, el límite es el vencimiento o hoy (el menor)
     const maxFecha = item.installment.fechaVencimiento <= todayStr ? item.installment.fechaVencimiento : todayStr;
     setFechaCobroReal(maxFecha);
     setMotivoExtemporaneo('');
@@ -390,7 +364,7 @@ export default function CollectionPage() {
 
     const errors: { montoRecibido?: string; fechaCobroReal?: string; motivoExtemporaneo?: string; general?: string } = {};
 
-    // 1. Validación de Monto Recibido y Reglas de Abonos Parciales (Orden visual de arriba a abajo)
+    // 1. Validación de Monto Recibido y Reglas de Abonos Parciales
     const cuotaFaltante = Math.round((selectedItem.installment.cuotaTotal - (selectedItem.installment.montoPagado || 0)) * 100) / 100;
     const penalizacion = esCobroExtemporaneo ? 0 : Number(penalizacionCobrada);
     const totalEsperado = Math.round((cuotaFaltante + penalizacion) * 100) / 100;
@@ -419,7 +393,6 @@ export default function CollectionPage() {
       }
     }
 
-    // Si existen errores, no enviamos al backend y se resaltan los inputs visualmente
     if (Object.keys(errors).length > 0) {
       setPaymentFormErrors(errors);
       return;
@@ -648,7 +621,7 @@ export default function CollectionPage() {
     }
   };
 
-  // Manejo de tecla Escape según .agents/rules/modals.md
+  // Manejo estricto de tecla Escape según .agents/rules/modals.md
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -664,151 +637,141 @@ export default function CollectionPage() {
 
   if (isPageLoading) {
     return (
-      <Card className="flex flex-col items-center justify-center min-h-[400px] p-12 space-y-4 my-8 shadow-sm">
-        <Loader2 className="w-10 h-10 text-primary animate-spin" />
-        <p className="text-base font-semibold text-muted-foreground">
+      <div className="flex flex-col items-center justify-center min-h-[360px] p-12 space-y-3 bg-white border border-border rounded-[6px] shadow-2xs my-6">
+        <Loader2 className="w-8 h-8 text-primary animate-spin" />
+        <p className="text-[13px] font-medium text-text-muted">
           Consultando cobranza en tiempo real desde PostgreSQL...
         </p>
-      </Card>
+      </div>
     );
   }
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
-      {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-6 max-w-7xl mx-auto pb-12">
+      {/* Page Header (Stripe Dashboard Architecture) */}
+      <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-extrabold text-foreground flex items-center gap-3 tracking-tight">
-            <span className="p-2.5 rounded-2xl bg-emerald-100 text-emerald-800 inline-flex shadow-xs">
-              <DollarSign className="w-7 h-7 stroke-[2.5]" />
-            </span>
-            Cobranza en Campo (Día Actual)
+          <h1 className="text-[22px] md:text-[24px] font-semibold text-foreground tracking-[-0.015em] leading-tight">
+            Cobranza en Campo
           </h1>
-          <p className="text-base text-muted-foreground font-medium mt-1">
+          <p className="text-[13px] text-text-muted mt-1 font-normal">
             Ruta de recaudación diaria y cuotas vencidas asignadas por promotor.
           </p>
+
+          {/* Quick KPI Row (Stripe Architecture: tnum font-mono) */}
+          <div className="flex flex-wrap items-center gap-6 mt-4 pt-3 border-t border-border">
+            <div className="flex flex-col">
+              <span className="text-[11.5px] text-text-muted font-normal">Recaudado hoy</span>
+              <span className="text-[15px] font-medium text-foreground font-mono mt-0.5">
+                {formatCurrency(totalCobradoHoy)} <span className="text-[11px] font-sans text-text-muted">MXN</span>
+              </span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-[11.5px] text-text-muted font-normal">Recibos emitidos</span>
+              <span className="text-[15px] font-medium text-foreground font-mono mt-0.5">
+                {cantidadRecibosHoy} <span className="text-[11px] font-sans text-text-muted">recibos</span>
+              </span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-[11.5px] text-text-muted font-normal">Por cobrar hoy</span>
+              <span className="text-[15px] font-medium text-foreground font-mono mt-0.5">
+                {formatCurrency(totalPorCobrarHoy)} <span className="text-[11px] font-sans text-text-muted">MXN</span>
+              </span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-[11.5px] text-text-muted font-normal">Cuotas en mora</span>
+              <span className={cn(
+                "text-[15px] font-mono mt-0.5 font-medium",
+                cuotasEnMoraCount > 0 ? "text-badge-danger-text" : "text-foreground"
+              )}>
+                {cuotasEnMoraCount} <span className="text-[11px] font-sans text-text-muted">vencidas</span>
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2.5 shrink-0">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            className="gap-1.5"
+            title="Sincronizar cobranza con PostgreSQL"
+          >
+            <RefreshCw className={cn("w-3.5 h-3.5", isRefreshing && "animate-spin")} />
+            <span>Actualizar</span>
+          </Button>
         </div>
       </div>
 
-      {/* Filters Toolbar (Dinámico: Búsqueda, Promotor, Frecuencia y Producto) */}
-      <Card className="p-4 shadow-sm">
-        <div className="flex flex-col md:flex-row gap-3 justify-between items-center">
-          <div className="relative w-full md:w-80">
-            <Search className="w-5 h-5 text-muted-foreground absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-            <Input
-              type="text"
-              placeholder="Buscar por cliente o folio..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-11 h-12 text-base bg-card text-foreground border-input"
-            />
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
-            {/* Filtro Promotor */}
-            <div className="flex items-center gap-2 bg-muted/60 px-3.5 py-2 rounded-xl border border-border text-sm min-h-[44px]">
-              <Filter className="w-4 h-4 text-muted-foreground shrink-0" />
-              <span className="text-muted-foreground font-semibold">Promotor:</span>
-              <select
-                value={promotorFilter}
-                onChange={(e) => setPromotorFilter(e.target.value)}
-                className="bg-transparent text-foreground font-semibold focus:outline-none capitalize cursor-pointer max-w-[150px] truncate"
-              >
-                {!isPromotorUser && <option value="todos" className="bg-card text-foreground">Todos</option>}
-                {promoterCatalog.map((p) => (
-                  <option key={p.name} value={p.name} className="bg-card text-foreground">
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Filtro Frecuencia */}
-            <div className="flex items-center gap-2 bg-muted/60 px-3.5 py-2 rounded-xl border border-border text-sm min-h-[44px]">
-              <Calendar className="w-4 h-4 text-muted-foreground shrink-0" />
-              <span className="text-muted-foreground font-semibold">Frecuencia:</span>
-              <select
-                value={frecuenciaFilter}
-                onChange={(e) => setFrecuenciaFilter(e.target.value as 'todas' | 'diario' | 'semanal')}
-                className="bg-transparent text-foreground font-semibold focus:outline-none cursor-pointer"
-              >
-                <option value="todas" className="bg-card text-foreground">Todas</option>
-                <option value="diario" className="bg-card text-foreground">Diario</option>
-                <option value="semanal" className="bg-card text-foreground">Semanal</option>
-              </select>
-            </div>
-
-            {/* Filtro Producto Financiero */}
-            <div className="flex items-center gap-2 bg-muted/60 px-3.5 py-2 rounded-xl border border-border text-sm min-h-[44px]">
-              <Layers className="w-4 h-4 text-muted-foreground shrink-0" />
-              <span className="text-muted-foreground font-semibold">Producto:</span>
-              <select
-                value={productoFilter}
-                onChange={(e) => setProductoFilter(e.target.value)}
-                className="bg-transparent text-foreground font-semibold focus:outline-none cursor-pointer max-w-[150px] truncate"
-              >
-                <option value="todos" className="bg-card text-foreground">Todos</option>
-                {activeProducts.map((p) => (
-                  <option key={p.id} value={p.id} className="bg-card text-foreground">
-                    {p.nombre}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-        </div>
-      </Card>
-
-      {/* Collection Tabs */}
-      <div className="flex flex-wrap rounded-2xl bg-muted/80 p-1.5 border border-border text-sm gap-1.5">
+      {/* Stripe Sub-navigation Tabs */}
+      <div className="flex items-center gap-1 border-b border-border overflow-x-auto scrollbar-none">
         <button
+          type="button"
           onClick={() => setActiveTab('pendientes')}
-          className={`flex-1 min-w-[140px] min-h-[44px] px-4 py-2.5 rounded-xl font-bold transition-all flex items-center justify-center gap-2 ${
+          className={cn(
+            "h-[36px] px-3.5 text-[13px] font-medium transition-colors border-b-2 flex items-center gap-2 whitespace-nowrap -mb-[1px] cursor-pointer",
             activeTab === 'pendientes'
-              ? 'bg-card text-primary shadow-sm border border-border'
-              : 'text-muted-foreground hover:text-foreground hover:bg-card/50'
-          }`}
+              ? "border-primary text-primary font-semibold"
+              : "border-transparent text-text-muted hover:text-foreground hover:border-border"
+          )}
         >
-          <Clock className="w-4 h-4 text-primary" />
-          <span>Ruta de Hoy ({collectionList.filter(i => (i.isToday || i.isOverdue) && i.installment.estado !== 'Pagado').length})</span>
+          <Clock className="w-3.5 h-3.5" />
+          <span>Ruta de Hoy</span>
+          <Badge variant={activeTab === 'pendientes' ? 'default' : 'secondary'} className="text-[10.5px] px-1.5 py-0 font-mono">
+            {collectionList.filter(i => (i.isToday || i.isOverdue || i.installment.estado === 'Parcial') && i.installment.estado !== 'Pagado').length}
+          </Badge>
         </button>
 
         <button
+          type="button"
           onClick={() => setActiveTab('mora')}
-          className={`flex-1 min-w-[140px] min-h-[44px] px-4 py-2.5 rounded-xl font-bold transition-all flex items-center justify-center gap-2 ${
+          className={cn(
+            "h-[36px] px-3.5 text-[13px] font-medium transition-colors border-b-2 flex items-center gap-2 whitespace-nowrap -mb-[1px] cursor-pointer",
             activeTab === 'mora'
-              ? 'bg-rose-100 text-rose-900 border border-rose-300 shadow-sm font-extrabold'
-              : 'text-muted-foreground hover:text-rose-900 hover:bg-card/50'
-          }`}
+              ? "border-destructive text-destructive font-semibold"
+              : "border-transparent text-text-muted hover:text-foreground hover:border-border"
+          )}
         >
-          <AlertTriangle className="w-4 h-4 text-rose-700" />
-          <span>En Mora ({collectionList.filter(i => i.isOverdue && i.installment.estado !== 'Pagado').length})</span>
+          <AlertTriangle className="w-3.5 h-3.5 text-badge-danger-text" />
+          <span>En Mora</span>
+          <Badge variant={activeTab === 'mora' ? 'destructive' : 'secondary'} className="text-[10.5px] px-1.5 py-0 font-mono">
+            {collectionList.filter(i => i.isOverdue && i.installment.estado !== 'Pagado' && i.installment.estado !== 'Parcial').length}
+          </Badge>
         </button>
 
         <button
+          type="button"
           onClick={() => setActiveTab('pagados')}
-          className={`flex-1 min-w-[140px] min-h-[44px] px-4 py-2.5 rounded-xl font-bold transition-all flex items-center justify-center gap-2 ${
+          className={cn(
+            "h-[36px] px-3.5 text-[13px] font-medium transition-colors border-b-2 flex items-center gap-2 whitespace-nowrap -mb-[1px] cursor-pointer",
             activeTab === 'pagados'
-              ? 'bg-emerald-100 text-emerald-950 border border-emerald-300 shadow-sm font-bold'
-              : 'text-muted-foreground hover:text-emerald-950 hover:bg-card/50'
-          }`}
+              ? "border-badge-success-text text-badge-success-text font-semibold"
+              : "border-transparent text-text-muted hover:text-foreground hover:border-border"
+          )}
         >
-          <CheckCircle2 className="w-4 h-4 text-emerald-700" />
-          <span>Cobrados Hoy ({collectionList.filter(i => i.installment.estado === 'Pagado' || (i.installment.estado === 'Parcial' && (i.installment.fechaPagoReal === todayStr || i.installment.fechaPago?.startsWith(todayStr)))).length})</span>
+          <CheckCircle2 className="w-3.5 h-3.5 text-badge-success-text" />
+          <span>Cobrados Hoy</span>
+          <Badge variant={activeTab === 'pagados' ? 'success' : 'secondary'} className="text-[10.5px] px-1.5 py-0 font-mono">
+            {collectionList.filter(i => i.installment.estado === 'Pagado' || (i.installment.estado === 'Parcial' && (i.installment.fechaPagoReal === todayStr || i.installment.fechaPago?.startsWith(todayStr)))).length}
+          </Badge>
         </button>
 
         <button
+          type="button"
           onClick={() => setActiveTab('arqueo')}
-          className={`flex-1 min-w-[150px] min-h-[44px] px-4 py-2.5 rounded-xl font-bold transition-all flex items-center justify-center gap-2 ${
+          className={cn(
+            "h-[36px] px-3.5 text-[13px] font-medium transition-colors border-b-2 flex items-center gap-2 whitespace-nowrap -mb-[1px] cursor-pointer",
             activeTab === 'arqueo'
-              ? 'bg-teal-100 text-teal-950 border border-teal-300 shadow-sm font-bold'
-              : 'text-muted-foreground hover:text-teal-950 hover:bg-card/50'
-          }`}
+              ? "border-primary text-primary font-semibold"
+              : "border-transparent text-text-muted hover:text-foreground hover:border-border"
+          )}
         >
-          <DollarSign className="w-4 h-4 text-teal-700 stroke-[2.5]" />
+          <DollarSign className="w-3.5 h-3.5" />
           <span>Arqueo y Cierre</span>
           {closures.filter(c => c.estatus === 'Pendiente').length > 0 && isAdminUser && (
-            <Badge variant="warning" className="px-2 py-0.5 text-xs font-black ml-1">
+            <Badge variant="warning" className="text-[10.5px] px-1.5 py-0 font-mono font-bold">
               {closures.filter(c => c.estatus === 'Pendiente').length}
             </Badge>
           )}
@@ -816,298 +779,388 @@ export default function CollectionPage() {
 
         {isAdminUser && (
           <button
+            type="button"
             onClick={() => setActiveTab('autorizaciones')}
-            className={`flex-1 min-w-[160px] min-h-[44px] px-4 py-2.5 rounded-xl font-bold transition-all flex items-center justify-center gap-2 ${
+            className={cn(
+              "h-[36px] px-3.5 text-[13px] font-medium transition-colors border-b-2 flex items-center gap-2 whitespace-nowrap -mb-[1px] cursor-pointer",
               activeTab === 'autorizaciones'
-                ? 'bg-amber-100 text-amber-950 border border-amber-300 shadow-sm font-bold'
-                : 'text-muted-foreground hover:text-amber-950 hover:bg-card/50'
-            }`}
+                ? "border-primary text-primary font-semibold"
+                : "border-transparent text-text-muted hover:text-foreground hover:border-border"
+            )}
           >
-            <ShieldCheck className="w-4 h-4 text-amber-700" />
-            <span>Autorizaciones ({pendingAuthorizations.length})</span>
+            <ShieldCheck className="w-3.5 h-3.5 text-badge-warning-text" />
+            <span>Autorizaciones</span>
             {pendingAuthorizations.length > 0 && (
-              <span className="w-2.5 h-2.5 rounded-full bg-rose-600 animate-ping ml-1" />
+              <Badge variant="warning" className="text-[10.5px] px-1.5 py-0 font-mono font-bold">
+                {pendingAuthorizations.length}
+              </Badge>
             )}
           </button>
         )}
+      </div>
+
+      {/* Filters Toolbar */}
+      <div className="bg-white border border-border rounded-[6px] p-3 shadow-2xs">
+        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+          <div className="relative w-full md:w-80">
+            <Search className="w-4 h-4 text-text-muted absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <Input
+              type="text"
+              placeholder="Buscar por cliente o folio..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-9 h-[34px] text-[13px] bg-white border-border rounded-[4px] placeholder:text-text-muted"
+            />
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2.5">
+            {/* Filtro Promotor */}
+            <div className="flex items-center gap-1.5 text-[13px]">
+              <span className="text-text-muted text-[12px] font-medium">Promotor:</span>
+              <select
+                value={promotorFilter}
+                onChange={(e) => setPromotorFilter(e.target.value)}
+                className="h-[34px] rounded-[4px] border border-border bg-white text-text-secondary text-[13px] font-medium px-2.5 py-1 focus:ring-2 focus:ring-ring focus:outline-none capitalize cursor-pointer max-w-[150px] truncate"
+              >
+                {!isPromotorUser && <option value="todos">Todos</option>}
+                {promoterCatalog.map((p) => (
+                  <option key={p.name} value={p.name}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Filtro Frecuencia */}
+            <div className="flex items-center gap-1.5 text-[13px]">
+              <span className="text-text-muted text-[12px] font-medium">Frecuencia:</span>
+              <select
+                value={frecuenciaFilter}
+                onChange={(e) => setFrecuenciaFilter(e.target.value as 'todas' | 'diario' | 'semanal')}
+                className="h-[34px] rounded-[4px] border border-border bg-white text-text-secondary text-[13px] font-medium px-2.5 py-1 focus:ring-2 focus:ring-ring focus:outline-none cursor-pointer"
+              >
+                <option value="todas">Todas</option>
+                <option value="diario">Diario</option>
+                <option value="semanal">Semanal</option>
+              </select>
+            </div>
+
+            {/* Filtro Producto */}
+            <div className="flex items-center gap-1.5 text-[13px]">
+              <span className="text-text-muted text-[12px] font-medium">Producto:</span>
+              <select
+                value={productoFilter}
+                onChange={(e) => setProductoFilter(e.target.value)}
+                className="h-[34px] rounded-[4px] border border-border bg-white text-text-secondary text-[13px] font-medium px-2.5 py-1 focus:ring-2 focus:ring-ring focus:outline-none cursor-pointer max-w-[150px] truncate"
+              >
+                <option value="todos">Todos</option>
+                {activeProducts.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.nombre}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* VIEW: ARQUEO Y CIERRE DE RUTA (CORTE 16:00 HRS & CUADRE 100%) */}
       {activeTab === 'arqueo' && (
         <div className="space-y-6">
           {/* Card Resumen de la Jornada Actual */}
-          <Card className="p-6 border-border shadow-sm space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-border">
-              <div>
-                <span className="text-xs font-mono font-bold text-primary uppercase tracking-wider block">
-                  Jornada de Cobranza del Día
-                </span>
-                <h3 className="text-xl font-extrabold text-foreground mt-0.5 flex items-center gap-2">
-                  Arqueo de Ruta: <span className="text-primary font-bold">
-                    {isPromotorUser ? currentUser.name : (promotorFilter !== 'todos' ? promotorFilter : 'Todos los Promotores')}
+          <Card className="border border-border rounded-[6px] shadow-2xs bg-white">
+            <CardHeader className="p-5 border-b border-border">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <span className="text-[11.5px] font-mono font-medium text-primary uppercase tracking-wider block">
+                    Jornada de Cobranza del Día
                   </span>
-                </h3>
-              </div>
-              <div className="flex items-center gap-2 bg-amber-50 px-3.5 py-2 rounded-xl border border-amber-200 text-sm">
-                <Clock className="w-4 h-4 text-amber-700" />
-                <span className="text-amber-900 font-semibold">Corte Contable:</span>
-                <strong className="text-amber-900 font-mono font-bold">16:00 hrs</strong>
-              </div>
-            </div>
-
-            {isLoadingPreview ? (
-              <div className="p-12 text-center space-y-3">
-                <Loader2 className="w-8 h-8 text-primary animate-spin mx-auto" />
-                <p className="text-sm font-semibold text-muted-foreground">Calculando arqueo en tiempo real...</p>
-              </div>
-            ) : closurePreview ? (
-              <div className="space-y-6">
-                {/* Métricas de lo recaudado */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200">
-                    <span className="text-emerald-900 text-xs font-bold block">Total a Depositar:</span>
-                    <strong className="text-emerald-800 font-mono text-xl font-black block mt-1">
-                      {formatCurrency(closurePreview.totalCobrado)}
-                    </strong>
-                  </div>
-                  <div className="p-4 rounded-xl bg-muted/40 border border-border">
-                    <span className="text-muted-foreground text-xs font-semibold block">Efectivo Físico:</span>
-                    <strong className="text-foreground font-mono text-lg font-bold block mt-1">
-                      {formatCurrency(closurePreview.totalEfectivo)}
-                    </strong>
-                  </div>
-                  <div className="p-4 rounded-xl bg-muted/40 border border-border">
-                    <span className="text-muted-foreground text-xs font-semibold block">Transferencias:</span>
-                    <strong className="text-foreground font-mono text-lg font-bold block mt-1">
-                      {formatCurrency(closurePreview.totalTransferencia)}
-                    </strong>
-                  </div>
-                  <div className="p-4 rounded-xl bg-muted/40 border border-border">
-                    <span className="text-muted-foreground text-xs font-semibold block">Cobros Realizados:</span>
-                    <strong className="text-foreground font-mono text-lg font-bold block mt-1">
-                      {closurePreview.cantidadCobros} recibos
-                    </strong>
-                  </div>
+                  <CardTitle className="text-[15px] font-semibold text-foreground mt-0.5">
+                    Arqueo de Ruta: <span className="text-primary font-semibold">
+                      {isPromotorUser ? currentUser.name : (promotorFilter !== 'todos' ? promotorFilter : 'Todos los Promotores')}
+                    </span>
+                  </CardTitle>
                 </div>
+                <div className="flex items-center gap-2 bg-badge-warning-bg px-2.5 py-1 rounded-[4px] border border-badge-warning-text/20 text-[12px]">
+                  <Clock className="w-3.5 h-3.5 text-badge-warning-text shrink-0" />
+                  <span className="text-badge-warning-text font-medium">Corte Contable:</span>
+                  <strong className="text-badge-warning-text font-mono font-semibold">16:00 hrs</strong>
+                </div>
+              </div>
+            </CardHeader>
 
-                {/* Alerta de cobros posteriores a las 16:00 hrs */}
-                {closurePreview.pagosSiguienteDia.cantidad > 0 && (
-                  <div className="p-5 rounded-2xl bg-indigo-50 border border-indigo-200 space-y-3">
-                    <div className="flex items-start gap-3 text-sm text-indigo-950">
-                      <Clock className="w-5 h-5 text-indigo-700 shrink-0 mt-0.5" />
-                      <div>
-                        <span className="font-extrabold block text-base">Regla de Corte de las 16:00 hrs aplicada:</span>
-                        <p className="mt-0.5 text-indigo-900">
-                          Tienes <strong>{closurePreview.pagosSiguienteDia.cantidad} cobro(s)</strong> registrados después de las 16:00 hrs ({formatCurrency(closurePreview.pagosSiguienteDia.total)}). Por política institucional, se acumularán automáticamente en el arqueo del siguiente día.
-                        </p>
-                      </div>
+            <CardContent className="p-5 space-y-6">
+              {isLoadingPreview ? (
+                <div className="py-12 text-center space-y-2">
+                  <Loader2 className="w-6 h-6 text-primary animate-spin mx-auto" />
+                  <p className="text-[13px] text-text-muted">Calculando arqueo en tiempo real...</p>
+                </div>
+              ) : closurePreview ? (
+                <div className="space-y-6">
+                  {/* Métricas de lo recaudado (Alineación contable font-mono text-right) */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="p-3.5 rounded-[4px] bg-badge-success-bg/40 border border-badge-success-text/20">
+                      <span className="text-text-muted text-[11.5px] font-medium block">Total a Depositar:</span>
+                      <strong className="text-badge-success-text font-mono text-[18px] font-semibold block mt-1 text-right">
+                        {formatCurrency(closurePreview.totalCobrado)}
+                        <span className="text-[11px] font-sans text-text-muted ml-1">MXN</span>
+                      </strong>
                     </div>
-                    {closurePreview.pagosSiguienteDia.pagos && closurePreview.pagosSiguienteDia.pagos.length > 0 && (
-                      <div className="rounded-xl border border-indigo-200 overflow-hidden bg-card mt-3">
+                    <div className="p-3.5 rounded-[4px] bg-surface-subtle border border-border">
+                      <span className="text-text-muted text-[11.5px] font-medium block">Efectivo Físico:</span>
+                      <strong className="text-foreground font-mono text-[15px] font-medium block mt-1 text-right">
+                        {formatCurrency(closurePreview.totalEfectivo)}
+                        <span className="text-[11px] font-sans text-text-muted ml-1">MXN</span>
+                      </strong>
+                    </div>
+                    <div className="p-3.5 rounded-[4px] bg-surface-subtle border border-border">
+                      <span className="text-text-muted text-[11.5px] font-medium block">Transferencias:</span>
+                      <strong className="text-foreground font-mono text-[15px] font-medium block mt-1 text-right">
+                        {formatCurrency(closurePreview.totalTransferencia)}
+                        <span className="text-[11px] font-sans text-text-muted ml-1">MXN</span>
+                      </strong>
+                    </div>
+                    <div className="p-3.5 rounded-[4px] bg-surface-subtle border border-border">
+                      <span className="text-text-muted text-[11.5px] font-medium block">Cobros Realizados:</span>
+                      <strong className="text-foreground font-mono text-[15px] font-medium block mt-1 text-right">
+                        {closurePreview.cantidadCobros} <span className="text-[11px] font-sans text-text-muted">recibos</span>
+                      </strong>
+                    </div>
+                  </div>
+
+                  {/* Alerta de cobros posteriores a las 16:00 hrs */}
+                  {closurePreview.pagosSiguienteDia.cantidad > 0 && (
+                    <div className="p-4 rounded-[6px] bg-surface-subtle border border-border space-y-3">
+                      <div className="flex items-start gap-2.5 text-[13px] text-text-secondary">
+                        <Clock className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                        <div>
+                          <span className="font-semibold text-foreground block text-[13px]">
+                            Regla de Corte de las 16:00 hrs aplicada:
+                          </span>
+                          <p className="mt-0.5 text-text-muted text-[12.5px]">
+                            Tienes <strong>{closurePreview.pagosSiguienteDia.cantidad} cobro(s)</strong> registrados después de las 16:00 hrs ({formatCurrency(closurePreview.pagosSiguienteDia.total)} MXN). Por política institucional, se acumularán automáticamente en el arqueo del siguiente día.
+                          </p>
+                        </div>
+                      </div>
+                      {closurePreview.pagosSiguienteDia.pagos && closurePreview.pagosSiguienteDia.pagos.length > 0 && (
+                        <div className="rounded-[4px] border border-border overflow-hidden bg-white mt-2">
+                          <Table>
+                            <TableHeader className="bg-surface-subtle border-b border-border">
+                              <TableRow className="hover:bg-transparent">
+                                <TableHead className="text-[11px] py-2">Folio Recibo</TableHead>
+                                <TableHead className="text-[11px] py-2">Cliente</TableHead>
+                                <TableHead className="text-[11px] py-2">Cuota</TableHead>
+                                <TableHead className="text-[11px] py-2 text-right">Monto</TableHead>
+                                <TableHead className="text-[11px] py-2 text-center">Tipo</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {closurePreview.pagosSiguienteDia.pagos.map((p) => (
+                                <TableRow key={p.id} className="hover:bg-surface-subtle/70">
+                                  <TableCell className="py-2">
+                                    <span className="font-mono text-[11px] px-1.5 py-0.5 rounded-[4px] bg-surface-subtle border border-border text-foreground font-medium">
+                                      {p.folioRecibo}
+                                    </span>
+                                  </TableCell>
+                                  <TableCell className="py-2 text-[12.5px] font-medium text-foreground">{p.clienteNombre}</TableCell>
+                                  <TableCell className="py-2 font-mono text-text-secondary text-[12px]">#{p.numeroCuota}</TableCell>
+                                  <TableCell className="py-2 text-right font-mono font-medium text-foreground text-[12.5px]">
+                                    {formatCurrency(p.montoRecibido)}
+                                  </TableCell>
+                                  <TableCell className="py-2 text-center">
+                                    {p.esAbonoParcial ? (
+                                      <Badge variant="warning" className="text-[10px] px-1.5 py-0">Parcial</Badge>
+                                    ) : (
+                                      <Badge variant="success" className="text-[10px] px-1.5 py-0">Liquidada</Badge>
+                                    )}
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Desglose Detallado de Recibos en Arqueo */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-semibold text-foreground text-[14px] flex items-center gap-2">
+                        <Receipt className="w-4 h-4 text-primary" />
+                        Recibos de la Jornada en Curso ({closurePreview.pagos?.length || 0})
+                      </h4>
+                      <span className="text-[12.5px] font-mono text-badge-success-text font-semibold text-right">
+                        Subtotal: {formatCurrency(closurePreview.totalCobrado)} MXN
+                      </span>
+                    </div>
+
+                    {closurePreview.pagos && closurePreview.pagos.length > 0 ? (
+                      <div className="rounded-[4px] border border-border overflow-hidden bg-white">
                         <Table>
-                          <TableHeader className="bg-indigo-50/70 border-b border-indigo-200">
-                            <TableRow className="border-indigo-200 hover:bg-transparent">
-                              <TableHead className="font-bold text-indigo-950 text-xs py-2.5">Folio Recibo</TableHead>
-                              <TableHead className="font-bold text-indigo-950 text-xs py-2.5">Cliente</TableHead>
-                              <TableHead className="font-bold text-indigo-950 text-xs py-2.5">Cuota</TableHead>
-                              <TableHead className="font-bold text-indigo-950 text-xs py-2.5 text-right">Monto</TableHead>
-                              <TableHead className="font-bold text-indigo-950 text-xs py-2.5 text-center">Tipo</TableHead>
+                          <TableHeader className="bg-surface-subtle border-b border-border">
+                            <TableRow className="hover:bg-transparent">
+                              <TableHead className="text-[11.5px]">Folio Recibo</TableHead>
+                              <TableHead className="text-[11.5px]">Cliente / Préstamo</TableHead>
+                              <TableHead className="text-[11.5px]">Cuota</TableHead>
+                              <TableHead className="text-[11.5px]">Cobrador</TableHead>
+                              <TableHead className="text-[11.5px]">Método</TableHead>
+                              <TableHead className="text-[11.5px] text-right">Monto Recaudado</TableHead>
+                              <TableHead className="text-[11.5px] text-center">Tipo</TableHead>
                             </TableRow>
                           </TableHeader>
-                          <TableBody className="divide-y divide-indigo-100">
-                            {closurePreview.pagosSiguienteDia.pagos.map((p) => (
-                              <TableRow key={p.id} className="border-indigo-100 hover:bg-indigo-50/30">
-                                <TableCell className="py-2.5 font-mono text-indigo-900 font-bold text-xs">{p.folioRecibo}</TableCell>
-                                <TableCell className="py-2.5 font-semibold text-foreground text-xs">{p.clienteNombre}</TableCell>
-                                <TableCell className="py-2.5 font-mono text-foreground text-xs">#{p.numeroCuota}</TableCell>
-                                <TableCell className="py-2.5 text-right font-mono font-black text-indigo-950 text-xs">{formatCurrency(p.montoRecibido)}</TableCell>
-                                <TableCell className="py-2.5 text-center">
-                                  {p.esAbonoParcial ? (
-                                    <Badge variant="warning" className="text-[11px] px-2 py-0.5 font-bold">Parcial</Badge>
-                                  ) : (
-                                    <Badge variant="success" className="text-[11px] px-2 py-0.5 font-bold">Liquidada</Badge>
-                                  )}
-                                </TableCell>
-                              </TableRow>
-                            ))}
+                          <TableBody>
+                            {closurePreview.pagos.map((p) => {
+                              const amortizacion = Math.max(0, Math.round((p.montoRecibido - (p.penalizacionCobrada || 0)) * 100) / 100);
+                              return (
+                                <TableRow key={p.id} className="hover:bg-surface-subtle/70">
+                                  <TableCell className="py-2.5">
+                                    <span className="font-mono text-[11px] px-1.5 py-0.5 rounded-[4px] bg-surface-subtle border border-border text-foreground font-medium">
+                                      {p.folioRecibo}
+                                    </span>
+                                  </TableCell>
+                                  <TableCell className="py-2.5">
+                                    <span className="font-medium text-foreground block text-[13px]">{p.clienteNombre}</span>
+                                    <span className="text-[11.5px] text-text-muted font-mono">{p.prestamoFolio}</span>
+                                  </TableCell>
+                                  <TableCell className="py-2.5 font-mono text-text-secondary text-[12.5px]">#{p.numeroCuota}</TableCell>
+                                  <TableCell className="py-2.5 text-text-secondary text-[12.5px]">{p.cobradorNombre}</TableCell>
+                                  <TableCell className="py-2.5">
+                                    <Badge variant="outline" className="text-[11px]">{p.metodoPago}</Badge>
+                                  </TableCell>
+                                  <TableCell className="py-2.5 text-right font-mono font-medium text-foreground text-[13px]">
+                                    {formatCurrency(p.montoRecibido)}
+                                    {p.penalizacionCobrada > 0 && (
+                                      <span className="block text-[11px] text-text-muted font-normal">
+                                        (Abono: {formatCurrency(amortizacion)} + Mora: {formatCurrency(p.penalizacionCobrada)})
+                                      </span>
+                                    )}
+                                  </TableCell>
+                                  <TableCell className="py-2.5 text-center">
+                                    {p.esAbonoParcial ? (
+                                      <Badge variant="warning" className="text-[11px]">Parcial</Badge>
+                                    ) : (
+                                      <Badge variant="success" className="text-[11px]">Liquidada</Badge>
+                                    )}
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
                           </TableBody>
                         </Table>
                       </div>
+                    ) : (
+                      <div className="py-8 text-center text-text-muted text-[13px] border border-dashed border-border rounded-[4px]">
+                        No hay recibos pendientes de corte para esta jornada.
+                      </div>
                     )}
                   </div>
-                )}
 
-                {/* Desglose Detallado de Recibos en Arqueo */}
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h4 className="font-extrabold text-foreground text-base flex items-center gap-2">
-                      <Receipt className="w-5 h-5 text-primary" />
-                      Recibos de la Jornada en Curso ({closurePreview.pagos?.length || 0})
-                    </h4>
-                    <span className="text-sm font-mono text-emerald-800 font-black">
-                      Subtotal: {formatCurrency(closurePreview.totalCobrado)}
-                    </span>
-                  </div>
+                  {/* Formulario de Cierre de Ruta (Promotor) */}
+                  {isPromotorUser && closurePreview.cantidadCobros > 0 && (
+                    <Card className="border border-border rounded-[6px] shadow-2xs bg-white">
+                      <CardHeader className="p-4 border-b border-border">
+                        <CardTitle className="text-[15px] font-semibold text-foreground flex items-center gap-2">
+                          <ShieldCheck className="w-4 h-4 text-primary" />
+                          Registro de Ficha de Depósito / Cierre de Ruta
+                        </CardTitle>
+                        <CardDescription className="text-[12.5px] text-text-muted font-normal">
+                          Ingresa los datos del comprobante bancario para conciliar el arqueo del día.
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="p-4">
+                        <form onSubmit={handleCreateClosure} className="space-y-4">
+                          {closureFeedback && (
+                            <div className="p-3 rounded-[4px] bg-surface-subtle border border-border text-foreground font-medium text-[13px] text-center">
+                              {closureFeedback}
+                            </div>
+                          )}
 
-                  {closurePreview.pagos && closurePreview.pagos.length > 0 ? (
-                    <div className="rounded-xl border border-border overflow-hidden bg-card">
-                      <Table>
-                        <TableHeader className="bg-muted/70">
-                          <TableRow className="border-border hover:bg-transparent">
-                            <TableHead className="font-bold text-foreground text-sm">Folio Recibo</TableHead>
-                            <TableHead className="font-bold text-foreground text-sm">Cliente / Préstamo</TableHead>
-                            <TableHead className="font-bold text-foreground text-sm">Cuota</TableHead>
-                            <TableHead className="font-bold text-foreground text-sm">Cobrador</TableHead>
-                            <TableHead className="font-bold text-foreground text-sm">Método</TableHead>
-                            <TableHead className="font-bold text-foreground text-sm text-right">Monto Recaudado</TableHead>
-                            <TableHead className="font-bold text-foreground text-sm text-center">Tipo</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody className="divide-y divide-border/60">
-                          {closurePreview.pagos.map((p) => {
-                            const amortizacion = Math.max(0, Math.round((p.montoRecibido - (p.penalizacionCobrada || 0)) * 100) / 100);
-                            return (
-                              <TableRow key={p.id} className="border-border/60 hover:bg-muted/50">
-                                <TableCell className="font-mono text-primary font-bold text-sm">{p.folioRecibo}</TableCell>
-                                <TableCell>
-                                  <span className="font-bold text-foreground block text-sm">{p.clienteNombre}</span>
-                                  <span className="text-xs text-muted-foreground font-mono">{p.prestamoFolio}</span>
-                                </TableCell>
-                                <TableCell className="font-mono font-semibold text-foreground text-sm">#{p.numeroCuota}</TableCell>
-                                <TableCell className="text-muted-foreground text-sm">{p.cobradorNombre}</TableCell>
-                                <TableCell>
-                                  <Badge variant="outline" className="text-xs font-semibold">{p.metodoPago}</Badge>
-                                </TableCell>
-                                <TableCell className="text-right font-mono font-black text-emerald-800 text-sm">
-                                  {formatCurrency(p.montoRecibido)}
-                                  {p.penalizacionCobrada > 0 && (
-                                    <span className="block text-[11px] text-rose-700 font-normal">
-                                      (Abono: {formatCurrency(amortizacion)} + Mora: {formatCurrency(p.penalizacionCobrada)})
-                                    </span>
-                                  )}
-                                </TableCell>
-                                <TableCell className="text-center">
-                                  {p.esAbonoParcial ? (
-                                    <Badge variant="warning" className="text-xs font-bold">Abono Parcial</Badge>
-                                  ) : (
-                                    <Badge variant="success" className="text-xs font-bold">Liquidada</Badge>
-                                  )}
-                                </TableCell>
-                              </TableRow>
-                            );
-                          })}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  ) : (
-                    <div className="py-8 text-center text-muted-foreground text-sm border border-dashed border-border rounded-xl">
-                      No hay recibos pendientes de corte para esta jornada.
-                    </div>
-                  )}
-                </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-foreground font-medium text-[13px] mb-1.5">
+                                Folio de Depósito Bancario / Transferencia *
+                              </label>
+                              <Input
+                                type="text"
+                                required
+                                placeholder="Ej. DEP-9823412 o Folio SPEI"
+                                value={folioDepositoInput}
+                                onChange={(e) => setFolioDepositoInput(e.target.value)}
+                                className="h-[36px] text-[13px] bg-white border-border text-foreground"
+                              />
+                            </div>
 
-                {/* Formulario de Cierre de Ruta (Promotor) */}
-                {isPromotorUser && closurePreview.cantidadCobros > 0 && (
-                  <Card className="border-border shadow-sm">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-lg font-extrabold text-foreground flex items-center gap-2">
-                        <ShieldCheck className="w-5 h-5 text-primary" />
-                        Registro de Ficha de Depósito / Cierre de Ruta
-                      </CardTitle>
-                      <CardDescription className="text-sm text-muted-foreground">
-                        Ingresa los datos del comprobante bancario para conciliar el arqueo del día.
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <form onSubmit={handleCreateClosure} className="space-y-4">
-                        {closureFeedback && (
-                          <div className="p-3.5 rounded-xl bg-primary/10 border border-primary/20 text-primary font-bold text-sm text-center">
-                            {closureFeedback}
+                            <div>
+                              <label className="block text-foreground font-medium text-[13px] mb-1.5">
+                                Monto Depositado en Banco ($ MXN) *
+                              </label>
+                              <Input
+                                type="number"
+                                step="0.01"
+                                inputMode="decimal"
+                                required
+                                value={montoDepositadoInput}
+                                onChange={(e) => setMontoDepositadoInput(Number(e.target.value))}
+                                className="h-[36px] text-[13px] font-mono text-right font-medium text-foreground bg-white border-border"
+                              />
+                              <span className="text-[11.5px] text-text-muted mt-1 block">
+                                Debe coincidir exactamente con {formatCurrency(closurePreview.totalCobrado)} MXN (100%).
+                              </span>
+                            </div>
                           </div>
-                        )}
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           <div>
-                            <label className="block text-foreground font-bold text-sm mb-1.5">
-                              Folio de Depósito Bancario / Transferencia *
+                            <label className="block text-foreground font-medium text-[13px] mb-1.5">
+                              Notas u Observaciones del Cierre
                             </label>
                             <Input
                               type="text"
-                              required
-                              placeholder="Ej. DEP-9823412 o Folio SPEI"
-                              value={folioDepositoInput}
-                              onChange={(e) => setFolioDepositoInput(e.target.value)}
-                              className="h-12 text-base bg-card border-input text-foreground"
+                              placeholder="Ej. Sucursal bancaria Centro, depósito en ventanilla..."
+                              value={notaCierreInput}
+                              onChange={(e) => setNotaCierreInput(e.target.value)}
+                              className="h-[36px] text-[13px] bg-white border-border text-foreground"
                             />
                           </div>
 
-                          <div>
-                            <label className="block text-foreground font-bold text-sm mb-1.5">
-                              Monto Depositado en Banco ($ MXN) *
-                            </label>
-                            <Input
-                              type="number"
-                              step="0.01"
-                              inputMode="decimal"
-                              required
-                              value={montoDepositadoInput}
-                              onChange={(e) => setMontoDepositadoInput(Number(e.target.value))}
-                              className="h-12 text-base font-mono font-bold text-emerald-800 bg-card border-input"
-                            />
-                            <span className="text-xs text-muted-foreground mt-1 block">
-                              Debe coincidir exactamente con {formatCurrency(closurePreview.totalCobrado)} (100%).
-                            </span>
-                          </div>
-                        </div>
-
-                        <div>
-                          <label className="block text-foreground font-bold text-sm mb-1.5">
-                            Notas u Observaciones del Cierre
-                          </label>
-                          <Input
-                            type="text"
-                            placeholder="Ej. Sucursal bancaria Centro, depósito en ventanilla..."
-                            value={notaCierreInput}
-                            onChange={(e) => setNotaCierreInput(e.target.value)}
-                            className="h-12 text-base bg-card border-input text-foreground"
-                          />
-                        </div>
-
-                        <Button
-                          type="submit"
-                          disabled={isSubmittingClosure}
-                          className="w-full h-12 min-h-[48px] bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-base shadow-sm"
-                        >
-                          {isSubmittingClosure ? (
-                            <>
-                              <Loader2 className="w-5 h-5 animate-spin" /> Procesando Cierre...
-                            </>
-                          ) : (
-                            <>
-                              <CheckCircle2 className="w-5 h-5" /> Registrar Cierre de Ruta y Enviar a Conciliación ({formatCurrency(closurePreview.totalCobrado)})
-                            </>
-                          )}
-                        </Button>
-                      </form>
-                    </CardContent>
-                  </Card>
-                )}
-              </div>
-            ) : (
-              <div className="p-8 text-center text-muted-foreground text-sm">
-                No hay cobros pendientes de corte para este promotor.
-              </div>
-            )}
+                          <Button
+                            type="submit"
+                            variant="stripe-actions"
+                            disabled={isSubmittingClosure}
+                            className="w-full h-[38px] text-[13px] font-medium"
+                          >
+                            {isSubmittingClosure ? (
+                              <>
+                                <Loader2 className="w-4 h-4 animate-spin" /> Procesando Cierre...
+                              </>
+                            ) : (
+                              <>
+                                <CheckCircle2 className="w-4 h-4" /> Registrar Cierre de Ruta y Enviar a Conciliación ({formatCurrency(closurePreview.totalCobrado)} MXN)
+                              </>
+                            )}
+                          </Button>
+                        </form>
+                      </CardContent>
+                    </Card>
+                  )}
+                </div>
+              ) : (
+                <div className="py-8 text-center text-text-muted text-[13px]">
+                  No hay cobros pendientes de corte para este promotor.
+                </div>
+              )}
+            </CardContent>
           </Card>
 
           {/* Historial y Conciliación de Cierres de Ruta */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-extrabold text-foreground flex items-center gap-2">
-                <FileText className="w-5 h-5 text-primary" />
+              <h3 className="text-[15px] font-semibold text-foreground flex items-center gap-2">
+                <FileText className="w-4 h-4 text-primary" />
                 Historial de Cierres y Conciliación Bancaria
               </h3>
-              <span className="text-sm text-muted-foreground font-semibold">
+              <span className="text-[12px] text-text-muted font-normal">
                 {closures.length} corte(s) registrado(s)
               </span>
             </div>
@@ -1118,87 +1171,87 @@ export default function CollectionPage() {
               return (
                 <Card
                   key={c.id}
-                  className={`p-5 transition-all shadow-sm ${
-                    isPendiente
-                      ? 'border-amber-300 bg-amber-50/30'
-                      : isConciliado
-                      ? 'border-border bg-card'
-                      : 'border-rose-300 bg-rose-50/30'
-                  }`}
+                  className={cn(
+                    "p-4 rounded-[6px] border shadow-2xs transition-colors",
+                    isPendiente ? "border-badge-warning-text/40 bg-badge-warning-bg/20" : isConciliado ? "border-border bg-white" : "border-badge-danger-text/40 bg-badge-danger-bg/20"
+                  )}
                 >
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-border">
                     <div>
-                      <span className="text-xs font-mono font-bold text-primary uppercase tracking-wider block">
+                      <span className="text-[11.5px] font-mono font-medium text-text-muted uppercase tracking-wider block">
                         {c.folioCierre} • Jornada: {c.fechaJornada} ({c.horaCorte} hrs)
                       </span>
-                      <h4 className="font-extrabold text-foreground text-lg mt-0.5">
-                        Promotor: <span className="text-muted-foreground">{c.promotorNombre}</span>
+                      <h4 className="font-semibold text-foreground text-[14px] mt-0.5">
+                        Promotor: <span className="text-text-secondary font-medium">{c.promotorNombre}</span>
                       </h4>
                     </div>
 
                     <Badge
                       variant={isPendiente ? 'warning' : isConciliado ? 'success' : 'destructive'}
-                      className="gap-1.5 py-1 px-3 text-xs font-bold"
+                      className="gap-1.5 py-0.5 px-2 text-[11px]"
                     >
-                      {isPendiente && <Clock className="w-3.5 h-3.5" />}
-                      {isConciliado && <CheckCircle2 className="w-3.5 h-3.5" />}
+                      {isPendiente && <Clock className="w-3 h-3" />}
+                      {isConciliado && <CheckCircle2 className="w-3 h-3" />}
                       {c.estatus}
                     </Badge>
                   </div>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 my-4 p-4 rounded-xl bg-muted/40 border border-border text-sm">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 my-3 p-3 rounded-[4px] bg-surface-subtle border border-border text-[12.5px]">
                     <div>
-                      <span className="text-muted-foreground text-xs block font-semibold">Monto Depositado:</span>
-                      <strong className="text-emerald-800 font-mono text-base font-black">
-                        {formatCurrency(c.totalCobrado)}
+                      <span className="text-text-muted text-[11px] block font-medium">Monto Depositado:</span>
+                      <strong className="text-foreground font-mono text-[14px] font-medium block text-right">
+                        {formatCurrency(c.totalCobrado)} <span className="text-[10px] font-sans text-text-muted">MXN</span>
                       </strong>
                     </div>
                     <div>
-                      <span className="text-muted-foreground text-xs block font-semibold">Folio Banco / Depósito:</span>
-                      <strong className="text-foreground font-mono">{c.folioDepositoBanco}</strong>
+                      <span className="text-text-muted text-[11px] block font-medium">Folio Banco / Depósito:</span>
+                      <strong className="text-foreground font-mono text-[12px]">{c.folioDepositoBanco}</strong>
                     </div>
                     <div>
-                      <span className="text-muted-foreground text-xs block font-semibold">Desglose:</span>
-                      <span className="text-foreground font-medium">
+                      <span className="text-text-muted text-[11px] block font-medium">Desglose:</span>
+                      <span className="text-text-secondary font-mono text-[12px]">
                         {formatCurrency(c.totalEfectivo)} efec. / {formatCurrency(c.totalTransferencia)} transf.
                       </span>
                     </div>
                     <div>
-                      <span className="text-muted-foreground text-xs block font-semibold">Cobros incluidos:</span>
+                      <span className="text-text-muted text-[11px] block font-medium">Cobros incluidos:</span>
                       <strong className="text-foreground">{c.cantidadCobros} recibos</strong>
                     </div>
                   </div>
 
                   {c.nota && (
-                    <p className="text-sm text-muted-foreground italic mb-3">
+                    <p className="text-[12.5px] text-text-muted italic mb-3">
                       Nota: &ldquo;{c.nota}&rdquo;
                     </p>
                   )}
 
                   {closureAuthFeedback?.id === c.id ? (
-                    <div className="p-3 text-center text-emerald-800 font-bold text-sm bg-emerald-100 rounded-xl border border-emerald-300">
+                    <div className="p-2.5 text-center text-badge-success-text font-medium text-[12.5px] bg-badge-success-bg rounded-[4px] border border-badge-success-text/20">
                       {closureAuthFeedback.message}
                     </div>
                   ) : isAdminUser && isPendiente ? (
-                    <div className="flex gap-3 pt-2 border-t border-border">
+                    <div className="flex gap-2.5 pt-2 border-t border-border">
                       <Button
                         variant="outline"
+                        size="sm"
                         disabled={isReconciling}
                         onClick={() => setRejectingClosure(c)}
-                        className="flex-1 min-h-[44px] h-12 text-sm font-bold border-destructive/40 text-destructive hover:bg-destructive/10"
+                        className="flex-1 text-badge-danger-text hover:bg-badge-danger-bg/50 border-border"
                       >
                         Rechazar Arqueo
                       </Button>
                       <Button
+                        variant="stripe-actions"
+                        size="sm"
                         disabled={isReconciling}
                         onClick={() => handleReconcileClosure(c.id, 'CONCILIAR')}
-                        className="flex-2 min-h-[44px] h-12 text-sm font-bold bg-emerald-700 hover:bg-emerald-800 text-white shadow-sm"
+                        className="flex-2 gap-1.5"
                       >
                         {isReconciling ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
                         ) : (
                           <>
-                            <CheckCircle2 className="w-4 h-4" />
+                            <CheckCircle2 className="w-3.5 h-3.5" />
                             Conciliar Depósito al 100%
                           </>
                         )}
@@ -1210,9 +1263,9 @@ export default function CollectionPage() {
             })}
 
             {closures.length === 0 && (
-              <Card className="p-8 text-center text-muted-foreground border-border shadow-sm">
-                <p className="text-base font-semibold">Aún no hay cierres de ruta registrados en el sistema.</p>
-              </Card>
+              <div className="p-8 text-center text-text-muted border border-border rounded-[6px] bg-white shadow-2xs text-[13px]">
+                Aún no hay cierres de ruta registrados en el sistema.
+              </div>
             )}
           </div>
         </div>
@@ -1224,56 +1277,62 @@ export default function CollectionPage() {
           {pendingAuthorizations.map((p) => (
             <Card
               key={p.id}
-              className="p-5 border-amber-300 bg-amber-50/40 space-y-4 shadow-sm"
+              className="p-5 border border-badge-warning-text/30 bg-white rounded-[6px] shadow-2xs space-y-4"
             >
-              <div className="flex justify-between items-start">
+              <div className="flex justify-between items-start gap-3">
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-mono font-bold text-amber-900 uppercase tracking-wider block">
-                      {p.folioRecibo} • Préstamo: {p.prestamoFolio}
+                    <span className="font-mono text-[11px] px-1.5 py-0.5 rounded-[4px] bg-surface-subtle border border-border text-foreground font-medium">
+                      {p.folioRecibo}
+                    </span>
+                    <span className="text-[12px] text-text-muted font-mono">
+                      Préstamo: {p.prestamoFolio}
                     </span>
                     {p.esVisitaFallida && (
-                      <Badge variant="warning" className="text-xs font-extrabold">
+                      <Badge variant="warning" className="text-[10.5px]">
                         Fuerza Mayor ($0)
                       </Badge>
                     )}
                   </div>
-                  <h3 className="font-extrabold text-foreground text-lg leading-tight mt-1">
+                  <h3 className="font-semibold text-foreground text-[15px] mt-1">
                     {p.clienteNombre}
                   </h3>
-                  <p className="text-sm text-muted-foreground mt-0.5">
-                    Reportado por: <strong className="text-foreground">{p.cobradorNombre}</strong>
+                  <p className="text-[12.5px] text-text-muted mt-0.5">
+                    Reportado por: <strong className="text-foreground font-medium">{p.cobradorNombre}</strong>
                   </p>
                 </div>
 
-                <Badge variant="warning" className="gap-1.5 py-1 px-3 text-xs font-bold">
-                  <Clock className="w-4 h-4" />
-                  {p.esVisitaFallida ? 'Exención en Revisión' : 'Pendiente de Aprobación'}
+                <Badge variant="warning" className="gap-1 py-0.5 px-2 text-[11px]">
+                  <Clock className="w-3 h-3" />
+                  {p.esVisitaFallida ? 'Exención en Revisión' : 'Pendiente'}
                 </Badge>
               </div>
 
               {/* Data comparison grid */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-4 rounded-xl bg-card border border-border text-sm">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-3.5 rounded-[4px] bg-surface-subtle border border-border text-[12.5px]">
                 <div>
-                  <span className="text-muted-foreground text-xs block font-semibold">Cuota Afectada:</span>
+                  <span className="text-text-muted text-[11px] block font-medium">Cuota Afectada:</span>
                   <strong className="text-foreground">Cuota #{p.numeroCuota}</strong>
                 </div>
                 <div>
-                  <span className="text-muted-foreground text-xs block font-semibold">Monto Recaudado:</span>
-                  <strong className={`font-mono text-base ${p.esVisitaFallida ? 'text-amber-800' : 'text-emerald-800 font-black'}`}>
-                    {p.esVisitaFallida ? '$0.00 (Visita no exitosa)' : formatCurrency(p.montoRecibido)}
+                  <span className="text-text-muted text-[11px] block font-medium">Monto Recaudado:</span>
+                  <strong className={cn(
+                    "font-mono text-[13.5px] block text-right",
+                    p.esVisitaFallida ? "text-text-muted" : "text-badge-success-text font-semibold"
+                  )}>
+                    {p.esVisitaFallida ? '$0.00 (Visita no exitosa)' : `${formatCurrency(p.montoRecibido)} MXN`}
                   </strong>
                 </div>
                 <div>
-                  <span className="text-muted-foreground text-xs block font-semibold">Fecha Reportada:</span>
-                  <strong className="text-foreground font-semibold">{p.fechaCobroReal || p.fechaPago}</strong>
+                  <span className="text-text-muted text-[11px] block font-medium">Fecha Reportada:</span>
+                  <strong className="text-foreground font-mono">{p.fechaCobroReal || p.fechaPago}</strong>
                 </div>
               </div>
 
               {/* Justification Box */}
-              <div className="p-4 rounded-xl bg-card border border-border text-sm space-y-1">
-                <span className="text-muted-foreground font-bold text-xs flex items-center gap-1.5">
-                  <FileText className="w-4 h-4 text-amber-600" />
+              <div className="p-3 rounded-[4px] bg-surface-subtle border border-border text-[12.5px] space-y-1">
+                <span className="text-text-muted font-medium text-[11.5px] flex items-center gap-1.5">
+                  <FileText className="w-3.5 h-3.5 text-text-muted" />
                   {p.esVisitaFallida ? 'Causa de Fuerza Mayor Reportada:' : 'Justificación del Promotor:'}
                 </span>
                 <p className="text-foreground italic">
@@ -1282,29 +1341,32 @@ export default function CollectionPage() {
               </div>
 
               {authFeedback?.id === p.id ? (
-                <div className="p-3 text-center text-emerald-800 font-bold text-sm bg-emerald-100 rounded-xl border border-emerald-300">
+                <div className="p-2.5 text-center text-badge-success-text font-medium text-[12.5px] bg-badge-success-bg rounded-[4px] border border-badge-success-text/20">
                   {authFeedback.message}
                 </div>
               ) : (
-                <div className="flex gap-3 pt-2">
+                <div className="flex gap-2.5 pt-2">
                   <Button
                     variant="outline"
+                    size="sm"
                     disabled={isAuthorizing}
                     onClick={() => setRejectingPayment(p)}
-                    className="flex-1 min-h-[44px] h-12 text-sm font-bold border-destructive/40 text-destructive hover:bg-destructive/10"
+                    className="flex-1 text-badge-danger-text hover:bg-badge-danger-bg/50 border-border"
                   >
                     {p.esVisitaFallida ? 'Rechazar Exención' : 'Rechazar'}
                   </Button>
                   <Button
+                    variant="stripe-actions"
+                    size="sm"
                     disabled={isAuthorizing}
                     onClick={() => handleAuthorizeDecision(p.id, 'APROBAR')}
-                    className="flex-2 min-h-[44px] h-12 text-sm font-bold bg-emerald-700 hover:bg-emerald-800 text-white shadow-sm"
+                    className="flex-2 gap-1.5"
                   >
                     {isAuthorizing ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
                     ) : (
                       <>
-                        <CheckCircle2 className="w-4 h-4" />
+                        <CheckCircle2 className="w-3.5 h-3.5" />
                         {p.esVisitaFallida ? 'Autorizar Exención de Mora' : 'Aprobar Cobro'}
                       </>
                     )}
@@ -1315,232 +1377,238 @@ export default function CollectionPage() {
           ))}
 
           {pendingAuthorizations.length === 0 && (
-            <Card className="p-12 text-center text-muted-foreground border-border shadow-sm">
-              <p className="text-base font-semibold">No hay solicitudes de pagos extemporáneos pendientes de autorización.</p>
-            </Card>
+            <div className="p-12 text-center text-text-muted border border-border rounded-[6px] bg-white shadow-2xs text-[13px]">
+              No hay solicitudes de pagos extemporáneos pendientes de autorización.
+            </div>
           )}
         </div>
       ) : (
-        /* VIEW: LISTA NORMAL DE COBRANZA */
-        <div className="space-y-4">
-          {filteredCollection.map((item, idx) => {
-            const isEnRevision = item.installment.estado === 'En Revisión';
-            // CÁLCULO DINÁMICO DE MORA SEGÚN EL PRODUCTO REAL
-            const recargoMoraCard = getInstallmentLateFee(item.installment, item.loan, products, todayStr);
-            const cuotaFaltanteCard = Math.round((item.installment.cuotaTotal - item.installment.montoPagado) * 100) / 100;
-            // FIX CRÍTICO: Sumar cuota faltante + recargo cuando está en mora
-            const totalACobrarCard = item.isOverdue && !isEnRevision
-              ? Math.round((cuotaFaltanteCard + recargoMoraCard) * 100) / 100
-              : cuotaFaltanteCard;
+        /* VIEW: LISTADO TABULAR DE COBRANZA EN CAMPO (TABLE INSTITUCIONAL) */
+        <Card className="border border-border rounded-[6px] bg-card overflow-hidden shadow-2xs">
+          <Table>
+            <TableHeader className="bg-surface-subtle border-b border-border">
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="w-[200px]">Folio & Cliente</TableHead>
+                <TableHead className="w-[180px]">Producto & Cuota</TableHead>
+                <TableHead className="w-[150px]">Promotor</TableHead>
+                <TableHead className="w-[130px]">Vencimiento</TableHead>
+                <TableHead className="w-[120px]">Estado</TableHead>
+                <TableHead className="text-right w-[150px]">
+                  {activeTab === 'pagados' ? 'Monto Recibido' : 'Total a Cobrar'}
+                </TableHead>
+                <TableHead className="text-right w-[160px]">Acciones</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredCollection.length > 0 ? (
+                filteredCollection.map((item, idx) => {
+                  const isEnRevision = item.installment.estado === 'En Revisión';
+                  const recargoMoraCard = getInstallmentLateFee(item.installment, item.loan, products, todayStr);
+                  const cuotaFaltanteCard = Math.round((item.installment.cuotaTotal - item.installment.montoPagado) * 100) / 100;
+                  const totalACobrarCard = item.isOverdue && !isEnRevision
+                    ? Math.round((cuotaFaltanteCard + recargoMoraCard) * 100) / 100
+                    : cuotaFaltanteCard;
 
-            return (
-              <Card
-                key={`${item.loan.id}-${item.installment.numeroCuota}-${idx}`}
-                className={`p-5 transition-all shadow-sm ${
-                  isEnRevision
-                    ? 'border-indigo-300 bg-indigo-50/30'
-                    : item.isOverdue
-                    ? 'border-rose-300 bg-rose-50/40'
-                    : 'border-border bg-card hover:border-primary/40'
-                }`}
-              >
-                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-3">
-                  <div>
-                    <h3 className="font-extrabold text-foreground text-xl leading-tight">
-                      {item.loan.clienteNombre}
-                    </h3>
-                    <p className="text-sm text-muted-foreground font-mono mt-1">
-                      Folio: <strong className="text-foreground">{item.loan.folio}</strong> • Cuota #{item.installment.numeroCuota} de {item.loan.plazoCantidad}
-                    </p>
-                    <div className="flex flex-wrap items-center gap-2 mt-2">
-                      <span className="text-xs text-primary font-bold">
-                        Promotor: {item.loan.promotorAsignado}
-                      </span>
-                      <span className="text-muted-foreground">•</span>
-                      <Badge variant="outline" className="text-xs font-semibold capitalize">
-                        {item.loan.productoNombre} ({item.loan.frecuenciaPago})
-                      </Badge>
-                    </div>
-                  </div>
+                  return (
+                    <TableRow key={`${item.loan.id}-${item.installment.numeroCuota}-${idx}`} className="hover:bg-surface-subtle/70">
+                      <TableCell className="py-2.5">
+                        <div className="space-y-0.5">
+                          <span className="font-mono text-[11px] px-1.5 py-0.5 rounded-[4px] bg-surface-subtle border border-border text-foreground font-medium">
+                            {item.loan.folio}
+                          </span>
+                          <div className="font-medium text-foreground text-[13px] leading-snug">
+                            {item.loan.clienteNombre}
+                          </div>
+                          {item.loan.clienteTelefono ? (
+                            <a
+                              href={`tel:${item.loan.clienteTelefono.replace(/\s+/g, '')}`}
+                              className="inline-flex items-center gap-1 text-[11.5px] text-text-muted hover:text-primary font-mono transition-colors"
+                              title={`Llamar a ${item.loan.clienteNombre}`}
+                            >
+                              <Phone className="w-3 h-3 text-text-muted" />
+                              <span>{item.loan.clienteTelefono}</span>
+                            </a>
+                          ) : null}
+                        </div>
+                      </TableCell>
 
-                  <RenderInstallmentBadge status={item.installment.estado} />
-                </div>
+                      <TableCell className="py-2.5">
+                        <div className="space-y-0.5">
+                          <div className="font-medium text-foreground text-[13px]">
+                            {item.loan.productoNombre}
+                          </div>
+                          <div className="text-[11.5px] text-text-muted capitalize">
+                            Cuota #{item.installment.numeroCuota} de {item.loan.plazoCantidad} • {item.loan.frecuenciaPago}
+                          </div>
+                        </div>
+                      </TableCell>
 
-                {/* Installment Info */}
-                <div className="grid grid-cols-2 gap-3 my-4 p-4 rounded-xl bg-muted/40 border border-border text-sm">
-                  <div>
-                    <span className="text-muted-foreground text-xs block font-semibold">Vencimiento:</span>
-                    <p className={`font-bold mt-0.5 text-base ${item.isOverdue ? 'text-rose-700 font-extrabold' : 'text-foreground'}`}>
-                      {formatDateWithDay(item.installment.fechaVencimiento)}
-                    </p>
-                  </div>
+                      <TableCell className="py-2.5">
+                        <div className="text-[13px] text-text-secondary font-medium">
+                          {item.loan.promotorAsignado}
+                        </div>
+                      </TableCell>
 
-                  <div>
-                    <span className="text-muted-foreground text-xs block font-semibold">
-                      {activeTab === 'pagados'
-                        ? item.installment.estado === 'Parcial'
-                          ? 'Abonado Hoy (Amortizado):'
-                          : 'Total Liquidado:'
-                        : 'Monto a Cobrar:'}
-                    </span>
-                    <p className={`font-mono font-black text-lg mt-0.5 ${
-                      activeTab === 'pagados'
-                        ? 'text-emerald-800'
-                        : item.isOverdue
-                        ? 'text-rose-800'
-                        : 'text-primary'
-                    }`}>
-                      {formatCurrency(
-                        activeTab === 'pagados'
-                          ? item.installment.montoPagado || item.installment.cuotaTotal
-                          : totalACobrarCard
-                      )}
-                    </p>
-                    {activeTab !== 'pagados' && item.isOverdue && recargoMoraCard > 0 && !isEnRevision && (
-                      <span className="block text-xs text-rose-700 font-extrabold mt-1">
-                        ⚠️ Incluye +{formatCurrency(recargoMoraCard)} recargo mora
-                      </span>
-                    )}
-                    {activeTab === 'pagados' && item.installment.estado === 'Parcial' && (
-                      <span className="block text-xs text-amber-800 font-bold mt-1">
-                        Restante por cobrar: {formatCurrency(item.installment.saldoPendiente)}
-                      </span>
-                    )}
-                  </div>
-                </div>
+                      <TableCell className="py-2.5 font-mono text-[12px]">
+                        <div className={cn(item.isOverdue ? "text-badge-danger-text font-medium" : "text-text-secondary")}>
+                          {formatDateWithDay(item.installment.fechaVencimiento)}
+                        </div>
+                        {item.isOverdue && !isEnRevision && (
+                          <div className="text-[10.5px] text-badge-danger-text font-sans">
+                            Vencida
+                          </div>
+                        )}
+                      </TableCell>
 
-                {/* Touch Action Buttons */}
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 pt-1">
-                  {item.loan.clienteTelefono && (
-                    <Button
-                      asChild
-                      variant="outline"
-                      size="icon"
-                      className="h-12 w-12 min-h-[44px] min-w-[44px] rounded-xl border-border text-emerald-700 hover:bg-emerald-50 shrink-0"
-                      title={`Llamar a ${item.loan.clienteNombre}`}
-                    >
-                      <a href={`tel:${item.loan.clienteTelefono.replace(/\s+/g, '')}`}>
-                        <Phone className="w-5 h-5" />
-                      </a>
-                    </Button>
-                  )}
+                      <TableCell className="py-2.5">
+                        <InstallmentStatusBadge status={item.installment.estado as EstadoCuota} />
+                      </TableCell>
 
-                  {isEnRevision ? (
-                    <div className="flex-1 min-h-[48px] py-2.5 px-4 rounded-xl bg-indigo-50 text-indigo-900 border border-indigo-200 text-sm font-bold text-center flex items-center justify-center gap-2">
-                      <Clock className="w-4 h-4 text-indigo-700" /> Solicitud en Revisión de Administrador
-                    </div>
-                  ) : activeTab === 'pagados' ? (
-                    item.installment.estado === 'Parcial' ? (
-                      <div className="flex-1 min-h-[48px] py-2.5 px-4 rounded-xl bg-emerald-50 text-emerald-900 border border-emerald-200 text-sm font-bold text-center flex flex-col sm:flex-row items-center justify-between gap-2">
-                        <span className="flex items-center gap-1.5 text-emerald-800 font-extrabold">
-                          <Check className="w-4 h-4" /> Abono Registrado Hoy ({formatCurrency(item.installment.montoPagado)})
-                        </span>
-                        <span className="text-xs text-amber-900 font-semibold">
-                          Saldo Restante: <strong className="font-mono text-sm">{formatCurrency(item.installment.saldoPendiente)}</strong>
-                        </span>
-                      </div>
-                    ) : (
-                      <div className="flex-1 min-h-[48px] py-2.5 px-4 rounded-xl bg-emerald-50 text-emerald-900 border border-emerald-200 text-sm font-bold text-center flex items-center justify-center gap-2">
-                        <Check className="w-4 h-4 text-emerald-700" /> Cobro Liquidado ({formatCurrency(item.installment.montoPagado || item.installment.cuotaTotal)})
-                      </div>
-                    )
-                  ) : item.installment.estado !== 'Pagado' ? (
-                    <div className="flex-1 flex flex-col sm:flex-row gap-2.5">
-                      <Button
-                        onClick={() => openPaymentModal(item)}
-                        className={`flex-1 h-12 min-h-[48px] text-base font-bold shadow-sm ${
-                          item.isOverdue
-                            ? 'bg-rose-700 hover:bg-rose-800 text-white'
-                            : 'bg-primary hover:bg-primary/90 text-primary-foreground'
-                        }`}
-                      >
-                        <DollarSign className="w-5 h-5 stroke-[2.5]" />
-                        {item.installment.estado === 'Parcial'
-                          ? `Completar Cobro (${formatCurrency(totalACobrarCard)})`
-                          : `Registrar Cobro (${formatCurrency(totalACobrarCard)})`}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => openFailedVisitModal(item)}
-                        className="h-12 min-h-[48px] border-amber-300 text-amber-900 hover:bg-amber-50 font-bold text-sm shrink-0"
-                        title="Reportar visita fallida por causa de fuerza mayor"
-                      >
-                        <AlertTriangle className="w-4 h-4 text-amber-600" />
-                        Visita Fallida ($0)
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="flex-1 min-h-[48px] py-2.5 px-4 rounded-xl bg-emerald-50 text-emerald-900 border border-emerald-200 text-sm font-bold text-center flex items-center justify-center gap-2">
-                      <Check className="w-4 h-4 text-emerald-700" /> Cobro Registrado
-                    </div>
-                  )}
-                </div>
-              </Card>
-            );
-          })}
+                      <TableCell className="py-2.5 text-right">
+                        <div className={cn(
+                          "font-mono font-medium text-[13px] text-right",
+                          activeTab === 'pagados'
+                            ? "text-badge-success-text"
+                            : item.isOverdue
+                            ? "text-badge-danger-text font-semibold"
+                            : "text-foreground"
+                        )}>
+                          {formatCurrency(
+                            activeTab === 'pagados'
+                              ? item.installment.montoPagado || item.installment.cuotaTotal
+                              : totalACobrarCard
+                          )}
+                          <span className="text-[10.5px] text-text-muted ml-1 font-sans">MXN</span>
+                        </div>
+                        {activeTab !== 'pagados' && item.isOverdue && recargoMoraCard > 0 && !isEnRevision && (
+                          <div className="text-[11px] font-mono text-badge-danger-text text-right font-normal">
+                            +{formatCurrency(recargoMoraCard)} mora
+                          </div>
+                        )}
+                        {activeTab === 'pagados' && item.installment.estado === 'Parcial' && (
+                          <div className="text-[11px] font-mono text-badge-warning-text text-right font-normal">
+                            Restante: {formatCurrency(item.installment.saldoPendiente)}
+                          </div>
+                        )}
+                      </TableCell>
 
-          {filteredCollection.length === 0 && (
-            <Card className="p-12 text-center text-muted-foreground border-border shadow-sm">
-              <p className="text-base font-semibold">No hay cobros asignados con los filtros seleccionados.</p>
-            </Card>
-          )}
-        </div>
+                      <TableCell className="py-2.5 text-right">
+                        {isEnRevision ? (
+                          <Badge variant="outline" className="text-text-muted text-[11px] font-normal">
+                            <Clock className="w-3 h-3 text-text-muted mr-1" /> En Revisión
+                          </Badge>
+                        ) : activeTab === 'pagados' ? (
+                          item.installment.estado === 'Parcial' ? (
+                            <Badge variant="warning" className="text-[11px]">
+                              <Clock className="w-3 h-3 mr-1" /> Abono Parcial
+                            </Badge>
+                          ) : (
+                            <Badge variant="success" className="text-[11px]">
+                              <Check className="w-3 h-3 mr-1" /> Liquidado
+                            </Badge>
+                          )
+                        ) : item.installment.estado !== 'Pagado' ? (
+                          <div className="inline-flex items-center justify-end gap-1.5">
+                            <Button
+                              variant={item.isOverdue ? "destructive" : "stripe-actions"}
+                              size="sm"
+                              onClick={() => openPaymentModal(item)}
+                              className="h-[30px] px-2.5 text-[12px] font-medium"
+                            >
+                              <DollarSign className="w-3.5 h-3.5" />
+                              <span>Cobrar</span>
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => openFailedVisitModal(item)}
+                              className="h-[30px] px-2 text-[12px] text-text-muted hover:text-text-secondary"
+                              title="Reportar visita fallida ($0)"
+                            >
+                              <AlertTriangle className="w-3.5 h-3.5 text-badge-warning-text" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <Badge variant="success" className="text-[11px]">
+                            <Check className="w-3 h-3 mr-1" /> Registrado
+                          </Badge>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={7} className="h-32 text-center text-text-muted text-[13px]">
+                    No hay cobros asignados con los filtros seleccionados.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </Card>
       )}
 
-      {/* MODAL EXPRESS DE COBRO EN CAMPO */}
+      {/* MODAL EXPRESS DE COBRO EN CAMPO (RADIX DIALOG ESTRICTO) */}
       <Dialog
         open={!!selectedItem}
         onOpenChange={(open) => {
           if (!open && !isSubmitting) setSelectedItem(null);
         }}
       >
-        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto bg-card text-card-foreground border-border shadow-2xl p-6">
-          <DialogHeader className="pb-2 border-b border-border">
-            <DialogTitle className="text-xl font-extrabold text-foreground">
+        <DialogContent
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onInteractOutside={(e) => e.preventDefault()}
+          className="sm:max-w-md max-h-[90vh] overflow-y-auto bg-white border border-border shadow-xl rounded-[8px] p-6 text-foreground"
+        >
+          <DialogHeader className="pb-3 border-b border-border">
+            <DialogTitle className="text-[17px] font-semibold text-foreground">
               {selectedItem?.loan.clienteNombre}
             </DialogTitle>
-            <DialogDescription className="text-xs font-bold text-primary uppercase tracking-wider">
+            <DialogDescription className="text-[12px] text-text-muted uppercase tracking-wider font-medium">
               Recibo de Cobranza en Campo
             </DialogDescription>
           </DialogHeader>
 
           {paymentSuccessMessage ? (
-            <div className="p-8 text-center space-y-3">
-              <div className="w-14 h-14 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto animate-bounce">
-                <CheckCircle2 className="w-8 h-8" />
+            <div className="py-8 text-center space-y-3">
+              <div className="w-12 h-12 rounded-full bg-badge-success-bg text-badge-success-text flex items-center justify-center mx-auto">
+                <CheckCircle2 className="w-6 h-6" />
               </div>
-              <p className="font-extrabold text-foreground text-lg">{paymentSuccessMessage}</p>
+              <p className="font-semibold text-foreground text-[15px]">{paymentSuccessMessage}</p>
             </div>
           ) : selectedItem ? (
-            <form onSubmit={handleRegisterPayment} noValidate className="space-y-4 text-sm pt-2">
+            <form onSubmit={handleRegisterPayment} noValidate className="space-y-4 text-[13px] pt-1">
               {/* Cuota details */}
-              <div className="p-4 rounded-xl bg-muted/40 border border-border space-y-2">
-                <div className="flex justify-between text-muted-foreground font-semibold">
+              <div className="p-3.5 rounded-[4px] bg-surface-subtle border border-border space-y-2 text-[12.5px]">
+                <div className="flex justify-between text-text-muted">
                   <span>Préstamo:</span>
-                  <strong className="font-mono text-primary font-bold">{selectedItem.loan.folio}</strong>
+                  <span className="font-mono text-foreground font-medium">{selectedItem.loan.folio}</span>
                 </div>
-                <div className="flex justify-between text-muted-foreground font-semibold">
+                <div className="flex justify-between text-text-muted">
                   <span>Producto:</span>
-                  <strong className="text-foreground capitalize">{selectedItem.loan.productoNombre} ({selectedItem.loan.frecuenciaPago})</strong>
+                  <span className="text-foreground capitalize">{selectedItem.loan.productoNombre} ({selectedItem.loan.frecuenciaPago})</span>
                 </div>
-                <div className="flex justify-between text-muted-foreground font-semibold">
+                <div className="flex justify-between text-text-muted">
                   <span>Cuota #:</span>
-                  <strong className="text-foreground">#{selectedItem.installment.numeroCuota} de {selectedItem.loan.plazoCantidad}</strong>
+                  <span className="text-foreground">#{selectedItem.installment.numeroCuota} de {selectedItem.loan.plazoCantidad}</span>
                 </div>
-                <div className="flex justify-between text-muted-foreground font-semibold">
+                <div className="flex justify-between text-text-muted">
                   <span>Valor Cuota Regular:</span>
-                  <strong className="text-foreground font-mono">{formatCurrency(selectedItem.installment.cuotaTotal)}</strong>
+                  <strong className="text-foreground font-mono font-medium text-right">
+                    {formatCurrency(selectedItem.installment.cuotaTotal)}
+                  </strong>
                 </div>
                 {selectedItem.installment.montoPagado > 0 && (
                   <>
-                    <div className="flex justify-between text-amber-800 font-semibold">
+                    <div className="flex justify-between text-badge-warning-text">
                       <span>Abonado Previamente:</span>
-                      <strong className="font-mono">-{formatCurrency(selectedItem.installment.montoPagado)}</strong>
+                      <strong className="font-mono text-right">-{formatCurrency(selectedItem.installment.montoPagado)}</strong>
                     </div>
-                    <div className="flex justify-between text-emerald-900 border-t border-border pt-1.5 font-bold">
+                    <div className="flex justify-between text-foreground border-t border-border pt-1.5 font-medium">
                       <span>Saldo Remanente de Cuota:</span>
-                      <strong className="font-mono font-black">
+                      <strong className="font-mono text-right">
                         {formatCurrency(selectedItem.installment.cuotaTotal - selectedItem.installment.montoPagado)}
                       </strong>
                     </div>
@@ -1550,38 +1618,38 @@ export default function CollectionPage() {
 
               {/* Penalización por Mora NO EDITABLE */}
               {selectedItem.isOverdue && !esCobroExtemporaneo && (
-                <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <AlertTriangle className="w-5 h-5 text-rose-700 shrink-0" />
+                <div className="p-3 rounded-[4px] bg-badge-danger-bg/40 border border-badge-danger-text/20 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 text-badge-danger-text shrink-0" />
                     <div>
-                      <span className="text-sm font-bold text-rose-900 block">Recargo por Mora:</span>
-                      <span className="text-xs text-rose-700">Estipulado por contrato del producto</span>
+                      <span className="text-[12.5px] font-semibold text-badge-danger-text block">Recargo por Mora:</span>
+                      <span className="text-[11px] text-text-muted">Estipulado por contrato del producto</span>
                     </div>
                   </div>
-                  <strong className="text-rose-900 font-mono text-lg font-black">
+                  <strong className="text-badge-danger-text font-mono text-[15px] font-semibold text-right">
                     +{formatCurrency(penalizacionCobrada)}
                   </strong>
                 </div>
               )}
 
               {/* Banner Total Sugerido */}
-              <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-300 flex justify-between items-center shadow-xs">
+              <div className="p-3.5 rounded-[4px] bg-surface-subtle border border-border flex justify-between items-center">
                 <div>
-                  <span className="text-emerald-950 font-extrabold text-sm block">Total a Recaudar al Cliente:</span>
+                  <span className="text-foreground font-semibold text-[13px] block">Total a Recaudar:</span>
                   {esCobroExtemporaneo ? (
-                    <span className="text-xs text-indigo-800 font-bold">Cobro en fecha reportado (sin mora)</span>
+                    <span className="text-[11.5px] text-primary font-medium">Cobro en fecha reportado (sin mora)</span>
                   ) : selectedItem.isOverdue ? (
-                    <span className="text-xs text-rose-700 font-bold">⚠️ Incluye penalización por mora</span>
+                    <span className="text-[11.5px] text-badge-danger-text font-normal">Incluye penalización por mora</span>
                   ) : null}
                 </div>
-                <strong className="text-emerald-800 font-black text-2xl font-mono">
-                  {formatCurrency(Number(montoRecibido))}
+                <strong className="text-foreground font-semibold text-[20px] font-mono text-right">
+                  {formatCurrency(Number(montoRecibido))} <span className="text-[12px] font-sans text-text-muted">MXN</span>
                 </strong>
               </div>
 
-              {/* Monto Recibido Input */}
+              {/* Monto Recibido Input (font-mono text-right) */}
               <div>
-                <label className="block text-foreground font-bold text-sm mb-1.5">
+                <label className="block text-foreground font-medium text-[13px] mb-1.5">
                   Monto Recibido ($ MXN) *
                 </label>
                 <Input
@@ -1599,15 +1667,14 @@ export default function CollectionPage() {
                       return next;
                     });
                   }}
-                  className={`h-14 text-2xl font-black font-mono text-emerald-800 bg-card border-input ${
-                    paymentFormErrors.montoRecibido
-                      ? 'border-destructive ring-1 ring-destructive'
-                      : 'border-input focus-visible:ring-emerald-700'
-                  }`}
+                  className={cn(
+                    "h-[40px] text-[18px] font-mono text-right font-semibold bg-white border-border rounded-[4px]",
+                    paymentFormErrors.montoRecibido ? "border-destructive ring-1 ring-destructive" : ""
+                  )}
                 />
                 {paymentFormErrors.montoRecibido && (
-                  <p className="text-xs text-destructive font-semibold mt-1.5 flex items-center gap-1">
-                    <AlertCircle className="w-4 h-4 shrink-0" />
+                  <p className="text-[11.5px] text-destructive font-medium mt-1 flex items-center gap-1">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />
                     {paymentFormErrors.montoRecibido}
                   </p>
                 )}
@@ -1615,15 +1682,15 @@ export default function CollectionPage() {
                   const cuotaFaltante = Math.round((selectedItem.installment.cuotaTotal - (selectedItem.installment.montoPagado || 0)) * 100) / 100;
                   const totalEsperado = esCobroExtemporaneo ? cuotaFaltante : cuotaFaltante + penalizacionCobrada;
                   return (
-                    <div className="mt-1.5 space-y-0.5">
-                      <p className="text-xs text-muted-foreground">
+                    <div className="mt-1 space-y-0.5 text-[11.5px]">
+                      <p className="text-text-muted">
                         {totalEsperado < 100
-                          ? `💡 Saldo restante menor a $100: abono exacto de ${formatCurrency(totalEsperado)} para liquidar la cuota.`
-                          : '💡 Abono mínimo permitido: $100.00 (o liquidación completa).'}
+                          ? `Saldo menor a $100: abono exacto de ${formatCurrency(totalEsperado)} para liquidar.`
+                          : 'Abono mínimo institucional: $100.00 (o liquidación completa).'}
                       </p>
                       {montoRecibido < totalEsperado && (
-                        <p className="text-xs text-amber-800 font-semibold">
-                          ⚠️ Se registrará como abono parcial con saldo remanente (sin mora adicional a futuro).
+                        <p className="text-badge-warning-text font-medium">
+                          Se registrará como abono parcial con congelamiento de mora en remanente.
                         </p>
                       )}
                     </div>
@@ -1631,10 +1698,10 @@ export default function CollectionPage() {
                 })()}
               </div>
 
-              {/* SECCIÓN DE COBRO EXTEMPORÁNEO */}
+              {/* Cobro Extemporáneo */}
               {selectedItem.isOverdue && (
-                <div className="p-4 rounded-xl bg-indigo-50/60 border border-indigo-200 space-y-3">
-                  <label className="flex items-start gap-3 cursor-pointer select-none">
+                <div className="p-3.5 rounded-[4px] bg-surface-subtle border border-border space-y-3">
+                  <label className="flex items-start gap-2.5 cursor-pointer select-none">
                     <input
                       type="checkbox"
                       checked={esCobroExtemporaneo}
@@ -1653,26 +1720,26 @@ export default function CollectionPage() {
                         }
                         setPaymentFormErrors({});
                       }}
-                      className="mt-1 w-4 h-4 rounded text-primary border-border focus:ring-ring"
+                      className="mt-0.5 w-3.5 h-3.5 rounded-[2px] text-primary border-border focus:ring-ring cursor-pointer"
                     />
                     <div>
-                      <span className="text-sm font-bold text-indigo-950 block">
+                      <span className="text-[12.5px] font-medium text-foreground block">
                         ¿Cobraste esta cuota en fecha y no pudiste registrarla?
                       </span>
-                      <span className="text-xs text-muted-foreground block mt-0.5">
+                      <span className="text-[11.5px] text-text-muted block mt-0.5">
                         Indica la fecha real de cobro. Requerirá autorización del Administrador para aplicarse sin mora.
                       </span>
                     </div>
                   </label>
 
                   {esCobroExtemporaneo && (
-                    <div className="space-y-3 pt-3 border-t border-indigo-200">
+                    <div className="space-y-3 pt-2.5 border-t border-border">
                       <div>
-                        <div className="flex items-center justify-between mb-1.5">
-                          <label className="text-xs font-bold text-foreground">
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="text-[12px] font-medium text-foreground">
                             Fecha Real de Recepción del Dinero *
                           </label>
-                          <span className="text-xs text-muted-foreground font-mono">
+                          <span className="text-[11px] text-text-muted font-mono">
                             Límite: Hoy ({todayStr})
                           </span>
                         </div>
@@ -1715,37 +1782,29 @@ export default function CollectionPage() {
                               });
                             }
                           }}
-                          className={`h-12 text-base bg-card text-foreground cursor-pointer ${
-                            paymentFormErrors.fechaCobroReal
-                              ? 'border-destructive ring-1 ring-destructive'
-                              : 'border-input focus-visible:ring-primary'
-                          }`}
+                          className={cn(
+                            "h-[36px] text-[13px] bg-white text-foreground cursor-pointer rounded-[4px]",
+                            paymentFormErrors.fechaCobroReal ? "border-destructive ring-1 ring-destructive" : ""
+                          )}
                         />
-                        {paymentFormErrors.fechaCobroReal ? (
-                          <p className="text-xs text-destructive font-semibold mt-1 flex items-center gap-1">
-                            <AlertCircle className="w-4 h-4 shrink-0" />
+                        {paymentFormErrors.fechaCobroReal && (
+                          <p className="text-[11.5px] text-destructive font-medium mt-1 flex items-center gap-1">
+                            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
                             {paymentFormErrors.fechaCobroReal}
-                          </p>
-                        ) : (
-                          <p className="text-xs text-muted-foreground mt-1">
-                            📅 Fechas pasadas permitidas. Fechas futuras inhabilitadas.
                           </p>
                         )}
                       </div>
 
                       <div>
-                        <div className="flex items-center justify-between mb-1.5">
-                          <label className="text-xs font-bold text-foreground">
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="text-[12px] font-medium text-foreground">
                             Motivo o Justificación del Retraso *
                           </label>
-                          <span
-                            className={`text-xs font-mono font-bold ${
-                              motivoExtemporaneo.trim().length >= 10
-                                ? 'text-emerald-700'
-                                : 'text-amber-700'
-                            }`}
-                          >
-                            {motivoExtemporaneo.trim().length}/10 caracteres mín.
+                          <span className={cn(
+                            "text-[11px] font-mono font-medium",
+                            motivoExtemporaneo.trim().length >= 10 ? "text-badge-success-text" : "text-badge-warning-text"
+                          )}>
+                            {motivoExtemporaneo.trim().length}/10 car. mín.
                           </span>
                         </div>
                         <textarea
@@ -1763,33 +1822,19 @@ export default function CollectionPage() {
                               });
                             }
                           }}
-                          className={`w-full px-3.5 py-2.5 rounded-xl bg-card border text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none transition-colors ${
+                          className={cn(
+                            "w-full px-3 py-2 rounded-[4px] bg-white border text-foreground text-[12.5px] focus:outline-none focus:ring-2 focus:ring-ring resize-none transition-colors",
                             paymentFormErrors.motivoExtemporaneo
-                              ? 'border-destructive ring-1 ring-destructive'
+                              ? "border-destructive ring-1 ring-destructive"
                               : motivoExtemporaneo.trim().length >= 10
-                              ? 'border-emerald-500 focus:border-emerald-600'
-                              : 'border-input'
-                          }`}
+                              ? "border-badge-success-text/50"
+                              : "border-border"
+                          )}
                         />
-                        {paymentFormErrors.motivoExtemporaneo ? (
-                          <p className="text-xs text-destructive font-semibold mt-1 flex items-center gap-1">
-                            <AlertCircle className="w-4 h-4 shrink-0" />
+                        {paymentFormErrors.motivoExtemporaneo && (
+                          <p className="text-[11.5px] text-destructive font-medium mt-1 flex items-center gap-1">
+                            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
                             {paymentFormErrors.motivoExtemporaneo}
-                          </p>
-                        ) : (
-                          <p
-                            className={`text-xs mt-1 ${
-                              motivoExtemporaneo.trim().length >= 10
-                                ? 'text-emerald-700 font-semibold'
-                                : 'text-muted-foreground'
-                            }`}
-                          >
-                            {motivoExtemporaneo.trim().length >= 10
-                              ? '✓ Motivo suficiente para revisión del Administrador.'
-                              : `⚠️ Se requieren al menos 10 caracteres (faltan ${Math.max(
-                                  0,
-                                  10 - motivoExtemporaneo.trim().length
-                                )}).`}
                           </p>
                         )}
                       </div>
@@ -1800,19 +1845,16 @@ export default function CollectionPage() {
 
               {/* Método de Pago */}
               <div>
-                <label className="block text-foreground font-bold text-sm mb-1.5">Método de Pago</label>
+                <label className="block text-foreground font-medium text-[13px] mb-1.5">Método de Pago</label>
                 <div className="grid grid-cols-3 gap-2">
                   {(['Efectivo', 'Transferencia', 'Tarjeta'] as const).map((method) => (
                     <Button
                       key={method}
                       type="button"
                       variant={metodoPago === method ? 'default' : 'outline'}
+                      size="sm"
                       onClick={() => setMetodoPago(method)}
-                      className={`h-12 min-h-[44px] font-bold text-sm ${
-                        metodoPago === method
-                          ? 'bg-primary text-primary-foreground'
-                          : 'border-border text-foreground hover:bg-muted'
-                      }`}
+                      className="h-[34px] text-[12.5px]"
                     >
                       {method}
                     </Button>
@@ -1822,45 +1864,44 @@ export default function CollectionPage() {
 
               {/* Nota Opcional */}
               <div>
-                <label className="block text-foreground font-bold text-sm mb-1.5">Comentario o Nota (Opcional)</label>
+                <label className="block text-foreground font-medium text-[13px] mb-1.5">Comentario o Nota (Opcional)</label>
                 <Input
                   type="text"
                   placeholder="Ej. Entregó recibo en papel"
                   value={nota}
                   onChange={(e) => setNota(e.target.value)}
-                  className="h-12 text-sm bg-card border-input text-foreground"
+                  className="h-[36px] text-[13px] bg-white border-border text-foreground rounded-[4px]"
                 />
               </div>
 
               {paymentFormErrors.general && (
-                <div className="p-3.5 rounded-xl bg-destructive/10 border border-destructive/30 text-destructive font-bold text-sm flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 shrink-0 text-destructive" />
+                <div className="p-3 rounded-[4px] bg-badge-danger-bg/40 border border-badge-danger-text/20 text-badge-danger-text font-medium text-[12.5px] flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-badge-danger-text" />
                   <span>{paymentFormErrors.general}</span>
                 </div>
               )}
 
-              <div className="pt-3 flex gap-3">
+              <div className="pt-2 flex gap-2.5">
                 <Button
                   type="button"
                   variant="outline"
+                  size="sm"
                   disabled={isSubmitting}
                   onClick={() => setSelectedItem(null)}
-                  className="w-1/3 h-12 min-h-[44px] text-sm font-semibold border-border"
+                  className="w-1/3 h-[36px]"
                 >
                   Cancelar
                 </Button>
                 <Button
                   type="submit"
+                  variant="stripe-actions"
+                  size="sm"
                   disabled={isSubmitting}
-                  className={`w-2/3 h-12 min-h-[44px] text-sm font-bold shadow-sm ${
-                    esCobroExtemporaneo
-                      ? 'bg-primary hover:bg-primary/90 text-primary-foreground'
-                      : 'bg-emerald-700 hover:bg-emerald-800 text-white'
-                  }`}
+                  className="w-2/3 h-[36px]"
                 >
                   {isSubmitting ? (
                     <>
-                      <Loader2 className="w-4 h-4 animate-spin" /> Procesando...
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Procesando...
                     </>
                   ) : esCobroExtemporaneo ? (
                     'Enviar a Autorización'
@@ -1881,23 +1922,27 @@ export default function CollectionPage() {
           if (!open && !isAuthorizing) setRejectingPayment(null);
         }}
       >
-        <DialogContent className="max-w-md bg-card text-card-foreground border-border shadow-2xl p-6">
-          <DialogHeader className="pb-2 border-b border-border">
-            <DialogTitle className="text-lg font-extrabold text-destructive flex items-center gap-2">
-              <XCircle className="w-5 h-5 text-destructive" />
+        <DialogContent
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onInteractOutside={(e) => e.preventDefault()}
+          className="sm:max-w-md bg-white text-foreground border border-border shadow-xl rounded-[8px] p-6"
+        >
+          <DialogHeader className="pb-3 border-b border-border">
+            <DialogTitle className="text-[17px] font-semibold text-destructive flex items-center gap-2">
+              <XCircle className="w-4 h-4 text-destructive" />
               Rechazar Cobro Extemporáneo
             </DialogTitle>
-            <DialogDescription className="text-sm text-muted-foreground">
+            <DialogDescription className="text-[12.5px] text-text-muted">
               Dictamen de autorización para {rejectingPayment?.clienteNombre}
             </DialogDescription>
           </DialogHeader>
 
-          <div className="text-sm space-y-3 text-muted-foreground pt-2">
+          <div className="text-[13px] space-y-3 text-text-secondary pt-1">
             <p>
               Al rechazar este pago, la cuota regresará a estado <strong>En Mora</strong> y se exigirá el pago de la penalización correspondiente.
             </p>
             <div>
-              <label className="block text-foreground font-bold text-sm mb-1.5">
+              <label className="block text-foreground font-medium text-[13px] mb-1.5">
                 Motivo del Rechazo *
               </label>
               <textarea
@@ -1905,29 +1950,31 @@ export default function CollectionPage() {
                 placeholder="Explica el motivo por el cual no procede la condonación..."
                 value={motivoRechazoInput}
                 onChange={(e) => setMotivoRechazoInput(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-card border border-input text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-destructive resize-none"
+                className="w-full px-3 py-2 rounded-[4px] bg-white border border-border text-foreground text-[13px] focus:outline-none focus:ring-2 focus:ring-ring resize-none"
               />
             </div>
           </div>
 
-          <div className="flex gap-3 pt-3">
+          <div className="flex gap-2.5 pt-2">
             <Button
               type="button"
               variant="outline"
+              size="sm"
               disabled={isAuthorizing}
               onClick={() => setRejectingPayment(null)}
-              className="w-1/3 h-12 min-h-[44px] text-sm font-semibold border-border"
+              className="w-1/3 h-[36px]"
             >
               Cancelar
             </Button>
             <Button
               type="button"
               variant="destructive"
+              size="sm"
               disabled={isAuthorizing || !motivoRechazoInput.trim()}
               onClick={() => handleAuthorizeDecision(rejectingPayment!.id, 'RECHAZAR', motivoRechazoInput)}
-              className="w-2/3 h-12 min-h-[44px] font-bold text-sm shadow-sm"
+              className="w-2/3 h-[36px]"
             >
-              {isAuthorizing ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Confirmar Rechazo'}
+              {isAuthorizing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Confirmar Rechazo'}
             </Button>
           </div>
         </DialogContent>
@@ -1940,64 +1987,68 @@ export default function CollectionPage() {
           if (!open && !isSubmittingFailedVisit) setFailedVisitItem(null);
         }}
       >
-        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto bg-card text-card-foreground border-border shadow-2xl p-6">
-          <DialogHeader className="pb-2 border-b border-border">
-            <DialogTitle className="text-lg font-extrabold text-foreground flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-amber-600" />
+        <DialogContent
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onInteractOutside={(e) => e.preventDefault()}
+          className="sm:max-w-md max-h-[90vh] overflow-y-auto bg-white text-foreground border border-border shadow-xl rounded-[8px] p-6"
+        >
+          <DialogHeader className="pb-3 border-b border-border">
+            <DialogTitle className="text-[17px] font-semibold text-foreground flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-badge-warning-text" />
               Reportar Visita No Exitosa
             </DialogTitle>
-            <DialogDescription className="text-xs font-bold text-amber-800 uppercase tracking-wider">
+            <DialogDescription className="text-[12px] font-medium text-badge-warning-text uppercase tracking-wider">
               Causa de Fuerza Mayor ($0)
             </DialogDescription>
           </DialogHeader>
 
           {failedVisitSuccess ? (
-            <div className="p-8 text-center space-y-3">
-              <div className="w-14 h-14 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto animate-bounce">
-                <CheckCircle2 className="w-8 h-8" />
+            <div className="py-8 text-center space-y-3">
+              <div className="w-12 h-12 rounded-full bg-badge-success-bg text-badge-success-text flex items-center justify-center mx-auto">
+                <CheckCircle2 className="w-6 h-6" />
               </div>
-              <p className="font-extrabold text-foreground text-base">{failedVisitSuccess}</p>
+              <p className="font-semibold text-foreground text-[15px]">{failedVisitSuccess}</p>
             </div>
           ) : failedVisitItem ? (
-            <form onSubmit={handleRegisterFailedVisit} noValidate className="space-y-4 text-sm pt-2">
+            <form onSubmit={handleRegisterFailedVisit} noValidate className="space-y-4 text-[13px] pt-1">
               {/* Cuota reference */}
-              <div className="p-4 rounded-xl bg-muted/40 border border-border space-y-2">
-                <div className="flex justify-between text-muted-foreground font-semibold">
+              <div className="p-3.5 rounded-[4px] bg-surface-subtle border border-border space-y-2 text-[12.5px]">
+                <div className="flex justify-between text-text-muted">
                   <span>Cliente:</span>
                   <strong className="text-foreground">{failedVisitItem.loan.clienteNombre}</strong>
                 </div>
-                <div className="flex justify-between text-muted-foreground font-semibold">
+                <div className="flex justify-between text-text-muted">
                   <span>Préstamo:</span>
-                  <strong className="font-mono text-primary font-bold">{failedVisitItem.loan.folio}</strong>
+                  <strong className="font-mono text-foreground font-medium">{failedVisitItem.loan.folio}</strong>
                 </div>
-                <div className="flex justify-between text-muted-foreground font-semibold">
+                <div className="flex justify-between text-text-muted">
                   <span>Cuota #:</span>
                   <strong className="text-foreground">#{failedVisitItem.installment.numeroCuota} de {failedVisitItem.loan.plazoCantidad}</strong>
                 </div>
               </div>
 
               {/* Explicación de regla */}
-              <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 flex items-start gap-3">
-                <AlertTriangle className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
-                <p className="text-xs text-amber-900 leading-relaxed font-medium">
+              <div className="p-3 rounded-[4px] bg-badge-warning-bg/40 border border-badge-warning-text/20 flex items-start gap-2.5">
+                <AlertTriangle className="w-4 h-4 text-badge-warning-text shrink-0 mt-0.5" />
+                <p className="text-[12px] text-text-secondary leading-relaxed font-normal">
                   Esta opción congela la cuota en <strong>En Revisión</strong> y solicita la exención de mora al Administrador. El sistema auditará la causa reportada para autorizar que no se aplique penalización.
                 </p>
               </div>
 
               {failedVisitErrors.general && (
-                <div className="p-3.5 rounded-xl bg-destructive/10 border border-destructive/30 text-destructive font-bold text-sm flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 shrink-0 text-destructive" />
+                <div className="p-3 rounded-[4px] bg-badge-danger-bg/40 border border-badge-danger-text/20 text-badge-danger-text font-medium text-[12.5px] flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-badge-danger-text" />
                   <span>{failedVisitErrors.general}</span>
                 </div>
               )}
 
               {/* Motivo de Fuerza Mayor Tipificado */}
               <div>
-                <label className="block text-foreground font-bold text-sm mb-1.5">Causa Tipificada *</label>
+                <label className="block text-foreground font-medium text-[13px] mb-1.5">Causa Tipificada *</label>
                 <select
                   value={motivoCausa}
                   onChange={(e) => setMotivoCausa(e.target.value)}
-                  className="w-full h-12 px-3.5 rounded-xl bg-card border border-input text-foreground text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
+                  className="w-full h-[36px] px-3 rounded-[4px] bg-white border border-border text-foreground text-[13px] font-medium focus:outline-none focus:ring-2 focus:ring-ring cursor-pointer"
                 >
                   <option value="Condiciones climáticas adversas / Inaccesibilidad en ruta">
                     Condiciones climáticas adversas / Inaccesibilidad en ruta
@@ -2019,18 +2070,15 @@ export default function CollectionPage() {
 
               {/* Detalles y Justificación */}
               <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-foreground font-bold text-sm">
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-foreground font-medium text-[13px]">
                     Descripción / Evidencia del Hecho *
                   </label>
-                  <span
-                    className={`text-xs font-mono font-bold ${
-                      detallesVisita.trim().length >= 10
-                        ? 'text-emerald-700'
-                        : 'text-amber-700'
-                    }`}
-                  >
-                    {detallesVisita.trim().length}/10 caracteres mín.
+                  <span className={cn(
+                    "text-[11px] font-mono font-medium",
+                    detallesVisita.trim().length >= 10 ? "text-badge-success-text" : "text-badge-warning-text"
+                  )}>
+                    {detallesVisita.trim().length}/10 car. mín.
                   </span>
                 </div>
                 <textarea
@@ -2048,56 +2096,45 @@ export default function CollectionPage() {
                       });
                     }
                   }}
-                  className={`w-full px-3.5 py-2.5 rounded-xl bg-card border text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none transition-colors ${
+                  className={cn(
+                    "w-full px-3 py-2 rounded-[4px] bg-white border text-foreground text-[12.5px] focus:outline-none focus:ring-2 focus:ring-ring resize-none transition-colors",
                     failedVisitErrors.detallesVisita
-                      ? 'border-destructive ring-1 ring-destructive'
+                      ? "border-destructive ring-1 ring-destructive"
                       : detallesVisita.trim().length >= 10
-                      ? 'border-emerald-500 focus:border-emerald-600'
-                      : 'border-input'
-                  }`}
+                      ? "border-badge-success-text/50"
+                      : "border-border"
+                  )}
                 />
-                {failedVisitErrors.detallesVisita ? (
-                  <p className="text-xs text-destructive font-semibold mt-1 flex items-center gap-1">
-                    <AlertCircle className="w-4 h-4 shrink-0" />
+                {failedVisitErrors.detallesVisita && (
+                  <p className="text-[11.5px] text-destructive font-medium mt-1 flex items-center gap-1">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />
                     {failedVisitErrors.detallesVisita}
-                  </p>
-                ) : (
-                  <p
-                    className={`text-xs mt-1 ${
-                      detallesVisita.trim().length >= 10
-                        ? 'text-emerald-700 font-semibold'
-                        : 'text-muted-foreground'
-                    }`}
-                  >
-                    {detallesVisita.trim().length >= 10
-                      ? '✓ Justificación suficiente para evaluación del Administrador.'
-                      : `⚠️ Se requieren al menos 10 caracteres (faltan ${Math.max(
-                          0,
-                          10 - detallesVisita.trim().length
-                        )}).`}
                   </p>
                 )}
               </div>
 
               {/* Botones de acción */}
-              <div className="flex gap-3 pt-3">
+              <div className="flex gap-2.5 pt-2">
                 <Button
                   type="button"
                   variant="outline"
+                  size="sm"
                   disabled={isSubmittingFailedVisit}
                   onClick={() => setFailedVisitItem(null)}
-                  className="w-1/3 h-12 min-h-[44px] text-sm font-semibold border-border"
+                  className="w-1/3 h-[36px]"
                 >
                   Cancelar
                 </Button>
                 <Button
                   type="submit"
+                  variant="stripe-actions"
+                  size="sm"
                   disabled={isSubmittingFailedVisit}
-                  className="w-2/3 h-12 min-h-[44px] bg-amber-600 hover:bg-amber-700 text-white font-bold text-sm shadow-sm"
+                  className="w-2/3 h-[36px]"
                 >
                   {isSubmittingFailedVisit ? (
                     <>
-                      <Loader2 className="w-4 h-4 animate-spin" /> Registrando...
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Registrando...
                     </>
                   ) : (
                     'Enviar a Autorización'
@@ -2116,23 +2153,27 @@ export default function CollectionPage() {
           if (!open && !isReconciling) setRejectingClosure(null);
         }}
       >
-        <DialogContent className="max-w-md bg-card text-card-foreground border-border shadow-2xl p-6">
-          <DialogHeader className="pb-2 border-b border-border">
-            <DialogTitle className="text-lg font-extrabold text-destructive flex items-center gap-2">
-              <XCircle className="w-5 h-5 text-destructive" />
+        <DialogContent
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onInteractOutside={(e) => e.preventDefault()}
+          className="sm:max-w-md bg-white text-foreground border border-border shadow-xl rounded-[8px] p-6"
+        >
+          <DialogHeader className="pb-3 border-b border-border">
+            <DialogTitle className="text-[17px] font-semibold text-destructive flex items-center gap-2">
+              <XCircle className="w-4 h-4 text-destructive" />
               Rechazar Cierre ({rejectingClosure?.folioCierre})
             </DialogTitle>
-            <DialogDescription className="text-sm text-muted-foreground">
+            <DialogDescription className="text-[12.5px] text-text-muted">
               Discrepancia en arqueo de {rejectingClosure?.promotorNombre}
             </DialogDescription>
           </DialogHeader>
 
-          <div className="text-sm space-y-3 text-muted-foreground pt-2">
+          <div className="text-[13px] space-y-3 text-text-secondary pt-1">
             <p>
               Al rechazar el arqueo, los cobros asociados serán liberados del cierre para que el promotor ({rejectingClosure?.promotorNombre}) aclare la discrepancia bancaria.
             </p>
             <div>
-              <label className="block text-foreground font-bold text-sm mb-1.5">
+              <label className="block text-foreground font-medium text-[13px] mb-1.5">
                 Motivo de Discrepancia *
               </label>
               <textarea
@@ -2140,29 +2181,31 @@ export default function CollectionPage() {
                 placeholder="Ej. El folio de depósito no refleja fondos en la cuenta bancaria..."
                 value={motivoRechazoCierre}
                 onChange={(e) => setMotivoRechazoCierre(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-card border border-input text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-destructive resize-none"
+                className="w-full px-3 py-2 rounded-[4px] bg-white border border-border text-foreground text-[13px] focus:outline-none focus:ring-2 focus:ring-ring resize-none"
               />
             </div>
           </div>
 
-          <div className="flex gap-3 pt-3">
+          <div className="flex gap-2.5 pt-2">
             <Button
               type="button"
               variant="outline"
+              size="sm"
               disabled={isReconciling}
               onClick={() => setRejectingClosure(null)}
-              className="w-1/3 h-12 min-h-[44px] text-sm font-semibold border-border"
+              className="w-1/3 h-[36px]"
             >
               Cancelar
             </Button>
             <Button
               type="button"
               variant="destructive"
+              size="sm"
               disabled={isReconciling || !motivoRechazoCierre.trim()}
               onClick={() => handleReconcileClosure(rejectingClosure!.id, 'RECHAZAR', motivoRechazoCierre)}
-              className="w-2/3 h-12 min-h-[44px] font-bold text-sm shadow-sm"
+              className="w-2/3 h-[36px]"
             >
-              {isReconciling ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Confirmar Rechazo'}
+              {isReconciling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Confirmar Rechazo'}
             </Button>
           </div>
         </DialogContent>
