@@ -1,14 +1,21 @@
 @import "tailwindcss";
 
 @theme inline {
+  --font-sans: var(--font-sans), 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: var(--font-mono), 'Source Code Pro', monospace;
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
+
   --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
   --color-primary-foreground: var(--primary-foreground);
+  --color-primary-subtle: var(--primary-subtle);
+
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
@@ -21,53 +28,101 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
 
-  /* Tokens semánticos microfinancieros */
+  /* Tintas y Textos Oficiales */
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+  --color-link: var(--link);
+  --color-surface-subtle: var(--surface-subtle);
+
+  /* Badges Semánticos de Estado */
+  --color-badge-success-bg: var(--badge-success-bg);
+  --color-badge-success-text: var(--badge-success-text);
+  --color-badge-info-bg: var(--badge-info-bg);
+  --color-badge-info-text: var(--badge-info-text);
+  --color-badge-warning-bg: var(--badge-warning-bg);
+  --color-badge-warning-text: var(--badge-warning-text);
+  --color-badge-danger-bg: var(--badge-danger-bg);
+  --color-badge-danger-text: var(--badge-danger-text);
+
+  /* Compatibilidad con nombres directos de semántica financiera */
+  --color-success-bg: var(--badge-success-bg);
+  --color-success-text: var(--badge-success-text);
+  --color-warning-bg: var(--badge-warning-bg);
+  --color-warning-text: var(--badge-warning-text);
+  --color-danger-bg: var(--badge-danger-bg);
+  --color-danger-text: var(--badge-danger-text);
   --color-success: var(--success);
   --color-success-foreground: var(--success-foreground);
   --color-warning: var(--warning);
   --color-warning-foreground: var(--warning-foreground);
 
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  /* Radios */
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: calc(var(--radius-lg) + 4px);
 }
 
 :root {
-  /* Canvas & Superficies (Banca Institucional Light-First) */
-  --background: #f8fafc;         /* Slate 50 */
-  --foreground: #0f172a;         /* Slate 900 (Contraste 16.5:1 - WCAG AAA) */
-  --card: #ffffff;               /* Blanco sólido */
-  --card-foreground: #0f172a;
+  /* Tipografía */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'Source Code Pro', monospace;
+
+  /* Colores de Marca y Acción */
+  --primary: #635bff;
+  --primary-hover: #5146e5;
+  --primary-foreground: #ffffff;
+  --primary-subtle: #f4f3ff;
+
+  /* Tintas y Textos */
+  --foreground: #1a1f36;
+  --text-secondary: #3c4257;
+  --text-muted: #697386;
+  --link: #0052cc;
+
+  /* Lienzo y Superficies */
+  --background: #ffffff;
+  --card: #ffffff;
+  --card-foreground: #1a1f36;
   --popover: #ffffff;
-  --popover-foreground: #0f172a;
+  --popover-foreground: #1a1f36;
+  --surface-subtle: #f7f8f9;
+  --border: #e3e8ee;
+  --input: #e3e8ee;
+  --ring: rgba(99, 91, 255, 0.35);
 
-  /* Identidad Institucional */
-  --primary: #0f2942;            /* Azul Marino Banco Profundo */
-  --primary-foreground: #ffffff; /* Contraste 14.8:1 */
-  --secondary: #f1f5f9;          /* Slate 100 */
-  --secondary-foreground: #0f172a;
+  /* Badges Semánticos de Estado (Contraste WCAG AAA) */
+  --badge-success-bg: #e3fcef;
+  --badge-success-text: #00875a;
 
-  /* Jerarquía de Texto y Soporte Senior */
-  --muted: #f1f5f9;              /* Slate 100 */
-  --muted-foreground: #334155;   /* Slate 700 (Contraste 8.3:1 - WCAG AAA) */
-  --accent: #e2e8f0;             /* Slate 200 */
-  --accent-foreground: #0f172a;
+  --badge-info-bg: #deebff;
+  --badge-info-text: #0052cc;
 
-  /* Estados Financieros */
-  --destructive: #991b1b;        /* Red 800 (Mora/Vencido - 8.2:1) */
+  --badge-warning-bg: #fffae6;
+  --badge-warning-text: #b76e00;
+
+  --badge-danger-bg: #ffebe6;
+  --badge-danger-text: #de350b;
+
+  /* Compatibilidad con shadcn y estados semánticos */
+  --secondary: #f7f8f9;
+  --secondary-foreground: #1a1f36;
+  --muted: #f7f8f9;
+  --muted-foreground: #697386;
+  --accent: #f4f3ff;
+  --accent-foreground: #635bff;
+  --destructive: #de350b;
   --destructive-foreground: #ffffff;
-  --success: #065f46;            /* Emerald 800 (Al corriente/Cobro - 7.8:1) */
+  --success: #00875a;
   --success-foreground: #ffffff;
-  --warning: #854d0e;            /* Amber 800 (Parcial/Pendiente - 7.4:1) */
+  --warning: #b76e00;
   --warning-foreground: #ffffff;
 
-  /* Delimitadores e Inputs */
-  --border: #cbd5e1;             /* Slate 300 */
-  --input: #cbd5e1;
-  --ring: #1d4ed8;               /* Blue 700 - Foco accesible */
-
-  --radius: 0.75rem;             /* 12px */
+  /* Radios Geométricos */
+  --radius: 6px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
 
   /* Compatibilidad con vistas existentes durante la migración */
   --bg-main: var(--background);
@@ -75,12 +130,62 @@
   --border-color: var(--border);
 }
 
+.dark {
+  --background: #0f172a;
+  --foreground: #f8fafc;
+  --card: #1e293b;
+  --card-foreground: #f8fafc;
+  --popover: #1e293b;
+  --popover-foreground: #f8fafc;
+
+  --primary: #635bff;
+  --primary-hover: #5146e5;
+  --primary-foreground: #ffffff;
+  --primary-subtle: #1e1b4b;
+
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --link: #38bdf8;
+
+  --surface-subtle: #1e293b;
+  --border: #334155;
+  --input: #334155;
+  --ring: rgba(99, 91, 255, 0.5);
+
+  --badge-success-bg: #064e3b;
+  --badge-success-text: #34d399;
+  --badge-info-bg: #1e3a8a;
+  --badge-info-text: #60a5fa;
+  --badge-warning-bg: #78350f;
+  --badge-warning-text: #fbbf24;
+  --badge-danger-bg: #7f1d1d;
+  --badge-danger-text: #f87171;
+
+  --secondary: #1e293b;
+  --secondary-foreground: #f8fafc;
+  --muted: #1e293b;
+  --muted-foreground: #94a3b8;
+  --accent: #1e1b4b;
+  --accent-foreground: #818cf8;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --success: #10b981;
+  --success-foreground: #ffffff;
+  --warning: #f59e0b;
+  --warning-foreground: #ffffff;
+}
+
+/* Regla tabular obligatoria para cifras numéricas y códigos */
+.font-mono {
+  font-feature-settings: 'tnum' 1;
+  font-variant-numeric: tabular-nums;
+}
+
 @layer base {
   body {
     background-color: var(--background);
     color: var(--foreground);
-    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-    font-size: 1rem; /* 16px base obligatoria para adultos mayores */
+    font-family: var(--font-sans), system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
     line-height: 1.5;
     overflow-x: hidden;
   }
@@ -95,11 +200,11 @@
   background: var(--background);
 }
 ::-webkit-scrollbar-thumb {
-  background: #94a3b8; /* Slate 400 */
+  background: var(--border);
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #64748b; /* Slate 500 */
+  background: var(--text-muted);
 }
 
 /* Transición de clases legacy a superficies sólidas limpias (cero glassmorphism) */
@@ -127,7 +232,7 @@
 
 /* Selector de fecha con alto contraste */
 input[type="date"]::-webkit-calendar-picker-indicator {
-  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="%230f172a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>') !important;
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="%231a1f36" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>') !important;
   filter: none !important;
   cursor: pointer !important;
   opacity: 1 !important;
@@ -139,6 +244,6 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 /* Inputs deshabilitados con contraste suficiente */
 input:disabled, input[readonly] {
   opacity: 1 !important;
-  background-color: var(--muted) !important;
-  color: var(--muted-foreground) !important;
+  background-color: var(--surface-subtle) !important;
+  color: var(--text-muted) !important;
 }
