@@ -11,9 +11,8 @@ import {
   Settings,
   TrendingUp,
   LogOut,
-  ShieldCheck,
-  UserCheck,
   UserCog,
+  ChevronDown,
 } from 'lucide-react';
 import { useImpulsoStore } from '@/store/useImpulsoStore';
 import { Button } from '@/components/ui/button';
@@ -83,93 +82,112 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
       {/* Mobile Backdrop */}
       {isOpen && (
         <div
-          className="fixed inset-0 z-40 bg-slate-900/50 backdrop-blur-xs md:hidden"
+          className="fixed inset-0 z-40 bg-foreground/20 backdrop-blur-xs md:hidden"
           onClick={onClose}
         />
       )}
 
       <aside
-        className={`fixed top-0 left-0 z-50 h-full w-64 bg-card border-r border-border flex flex-col justify-between transition-transform duration-300 ease-in-out md:translate-x-0 ${
+        className={`fixed top-0 left-0 z-50 h-full w-64 bg-white border-r border-border flex flex-col justify-between transition-transform duration-200 ease-in-out md:translate-x-0 ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        <div>
-          {/* Brand Header */}
-          <div className="p-5 border-b border-border flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center text-primary-foreground shadow-xs font-black">
-              <TrendingUp className="w-6 h-6 text-primary-foreground" />
+        <div className="flex flex-col flex-1 min-h-0">
+          {/* Cabecera: Selector de Organización/Sucursal estilo Stripe */}
+          <div className="px-3.5 py-3 border-b border-border flex items-center justify-between hover:bg-surface-subtle/60 transition-colors cursor-pointer select-none">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-7 h-7 rounded-[4px] bg-badge-success-bg text-badge-success-text flex items-center justify-center font-bold text-xs shrink-0">
+                FI
+              </div>
+              <div className="flex flex-col min-w-0">
+                <span className="font-semibold text-[13.5px] text-foreground truncate tracking-tight">
+                  Financiera Impulso
+                </span>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <Badge variant="secondary" className="px-1.5 py-0 text-[10px] h-4 font-medium leading-none">
+                    Operativo
+                  </Badge>
+                  <span className="text-[11px] text-text-muted truncate">Matriz</span>
+                </div>
+              </div>
             </div>
-            <div>
-              <h1 className="font-extrabold text-lg tracking-tight text-foreground flex items-center gap-1">
-                IMPULSO
-              </h1>
-              <p className="text-xs text-muted-foreground font-semibold">Gestión & Cobranza</p>
-            </div>
+            <ChevronDown className="w-3.5 h-3.5 text-text-muted shrink-0" />
           </div>
 
-          {/* User Profile Card */}
-          <div className="p-3 mx-3 my-3 rounded-xl bg-muted/60 border border-border flex items-center gap-3">
-            <img
-              src={currentUser.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200'}
-              alt={currentUser.name}
-              className="w-10 h-10 rounded-full border border-border object-cover"
-            />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold text-foreground truncate">{currentUser.name}</p>
-              <Badge
-                variant={isAdmin ? 'default' : 'secondary'}
-                className="text-xs font-semibold py-0 px-2 mt-0.5"
-              >
-                {isAdmin ? (
-                  <ShieldCheck className="w-3 h-3 mr-1" />
-                ) : (
-                  <UserCheck className="w-3 h-3 mr-1" />
-                )}
-                {currentUser.role}
-              </Badge>
-            </div>
-          </div>
-
-          {/* Navigation Links */}
-          <nav className="px-3 space-y-1.5 mt-2">
-            <p className="px-3 text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">
-              Módulos del Sistema
-            </p>
+          {/* Navegación */}
+          <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-1">
             {navItems.map((item) => {
               const Icon = item.icon;
-              const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
+              const isActive =
+                item.href === '/'
+                  ? pathname === '/'
+                  : pathname === item.href || pathname.startsWith(item.href + '/');
 
               return (
                 <Link
                   key={item.href}
                   href={item.href}
                   onClick={onClose}
-                  className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all min-h-[44px] ${
+                  className={
                     isActive
-                      ? 'bg-muted text-foreground border border-border shadow-2xs font-bold'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/60 border border-transparent'
-                  }`}
+                      ? 'bg-primary-subtle text-primary font-semibold text-[13px] px-3 py-2 rounded-[4px] flex items-center gap-2.5'
+                      : 'text-text-secondary hover:text-foreground hover:bg-surface-subtle font-medium text-[13px] px-3 py-2 rounded-[4px] flex items-center gap-2.5 transition-colors'
+                  }
                 >
-                  <div className="flex items-center gap-3">
-                    <Icon className={`w-5 h-5 ${isActive ? 'text-primary' : 'text-muted-foreground'}`} />
-                    <span>{item.name}</span>
-                  </div>
+                  <Icon
+                    className={`w-[18px] h-[18px] shrink-0 ${
+                      isActive ? 'text-primary' : 'text-text-muted'
+                    }`}
+                  />
+                  <span className="truncate">{item.name}</span>
                 </Link>
               );
             })}
           </nav>
         </div>
 
-        {/* Footer Actions */}
-        <div className="p-3 border-t border-border">
-          <Button
-            variant="outline"
-            onClick={handleLogout}
-            className="w-full h-11 text-destructive border-border hover:bg-destructive hover:text-destructive-foreground hover:border-destructive font-semibold justify-center gap-2"
-          >
-            <LogOut className="w-4 h-4" />
-            Cerrar Sesión
-          </Button>
+        {/* Pie del Sidebar: Botón tipo Stripe y ficha compacta de usuario */}
+        <div className="p-3 border-t border-border bg-white space-y-2.5">
+          {/* Botón >_ Modo Operativo / Soporte */}
+          <div className="flex items-center justify-between border border-border rounded-[4px] px-2.5 py-1.5 bg-white hover:bg-surface-subtle text-text-secondary hover:text-foreground text-[12px] font-medium transition-colors cursor-pointer select-none group">
+            <div className="flex items-center gap-2">
+              <span className="font-mono font-bold text-[11px] text-primary">&gt;_</span>
+              <span>Modo Operativo / Soporte</span>
+            </div>
+            <span className="text-text-muted font-mono text-[11px] group-hover:text-foreground">|→</span>
+          </div>
+
+          {/* Ficha compacta de usuario con botón de cerrar sesión */}
+          <div className="flex items-center justify-between pt-1">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <img
+                src={
+                  currentUser.avatar ||
+                  'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200'
+                }
+                alt={currentUser.name}
+                className="w-7 h-7 rounded-full border border-border object-cover shrink-0"
+              />
+              <div className="flex flex-col min-w-0">
+                <p className="text-[12px] font-semibold text-foreground truncate leading-tight">
+                  {currentUser.name}
+                </p>
+                <p className="text-[11px] text-text-muted truncate leading-tight mt-0.5">
+                  {currentUser.role}
+                </p>
+              </div>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleLogout}
+              className="h-7 w-7 text-text-muted hover:text-badge-danger-text hover:bg-badge-danger-bg rounded-[4px] shrink-0"
+              title="Cerrar Sesión"
+              aria-label="Cerrar Sesión"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+            </Button>
+          </div>
         </div>
       </aside>
     </>
