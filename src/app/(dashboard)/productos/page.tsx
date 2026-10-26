@@ -2,13 +2,34 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { Settings, Plus, Percent, Calendar, ShieldAlert, CheckCircle2, XCircle, Edit3, Sparkles, AlertCircle, Trash2, Loader2 } from 'lucide-react';
+import {
+  Settings,
+  Plus,
+  Percent,
+  Calendar,
+  ShieldAlert,
+  CheckCircle2,
+  XCircle,
+  Edit3,
+  Trash2,
+  Loader2,
+  Layers,
+  AlertCircle,
+  X,
+  LayoutGrid,
+  Table as TableIcon,
+} from 'lucide-react';
 import { useImpulsoStore } from '@/store/useImpulsoStore';
 import { FinancialProduct, FrecuenciaPago, TipoPenalizacionMora } from '@/types';
 import { formatCurrency } from '@/lib/utils';
 import { ConfirmModal } from '@/components/shared/ConfirmModal';
-
 import { createProductAction, updateProductAction, deleteProductAction } from '@/app/actions/productActions';
+
+import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 
 export default function ProductsPage() {
   const { products, currentUser, loadDataFromDB } = useImpulsoStore();
@@ -18,6 +39,7 @@ export default function ProductsPage() {
   const [deletingProduct, setDeletingProduct] = useState<FinancialProduct | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [viewMode, setViewMode] = useState<'table' | 'grid'>('table');
   const modalScrollRef = useRef<HTMLDivElement>(null);
 
   // Form State
@@ -61,35 +83,35 @@ export default function ProductsPage() {
 
   if (isPageLoading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[400px] p-12 space-y-4 glass-panel rounded-3xl border border-slate-800 my-8">
-        <Loader2 className="w-10 h-10 text-emerald-400 animate-spin" />
-        <p className="text-sm font-semibold text-slate-300">Consultando catálogo de productos en tiempo real desde PostgreSQL...</p>
-      </div>
+      <Card className="flex flex-col items-center justify-center min-h-[400px] p-12 space-y-4 my-8 bg-card border-border shadow-2xs">
+        <Loader2 className="w-8 h-8 text-primary animate-spin" />
+        <p className="text-[13px] font-medium text-text-muted">Consultando catálogo de productos financieros en tiempo real...</p>
+      </Card>
     );
   }
 
   // Si no es Administrador, bloquear acceso
   if (!isAdmin) {
     return (
-      <div className="glass-panel p-8 rounded-2xl border border-slate-800 text-center space-y-4 max-w-xl mx-auto my-12">
-        <div className="w-14 h-14 mx-auto rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400">
-          <ShieldAlert className="w-8 h-8" />
+      <Card className="p-8 rounded-[8px] border border-border bg-card text-center space-y-4 max-w-lg mx-auto my-12 shadow-2xs">
+        <div className="w-12 h-12 mx-auto rounded-full bg-badge-danger-bg border border-badge-danger-text/20 flex items-center justify-center text-badge-danger-text">
+          <ShieldAlert className="w-6 h-6" />
         </div>
-        <h2 className="text-xl font-extrabold text-white">Acceso Restringido</h2>
-        <p className="text-sm text-slate-400">
+        <h2 className="text-[18px] font-semibold text-foreground tracking-tight">Acceso Restringido</h2>
+        <p className="text-[13px] text-text-muted leading-relaxed">
           Únicamente los usuarios con rol de <strong>Administrador</strong> tienen autorización para configurar y gestionar los productos financieros.
         </p>
-        <Link
-          href="/"
-          className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold text-xs border border-slate-700 transition-all"
-        >
-          Regresar al Inicio
-        </Link>
-      </div>
+        <div className="pt-2">
+          <Button asChild variant="outline">
+            <Link href="/">Regresar al Inicio</Link>
+          </Button>
+        </div>
+      </Card>
     );
   }
 
   const activeVisibleProducts = products.filter((p) => !p.eliminado);
+  const activeCount = activeVisibleProducts.filter((p) => p.activo).length;
 
   const handleToggleStatus = async (p: FinancialProduct) => {
     await updateProductAction(p.id, { activo: !p.activo });
@@ -218,183 +240,416 @@ export default function ProductsPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-extrabold text-white flex items-center gap-2 tracking-tight">
-            <Settings className="w-7 h-7 text-emerald-400" />
+          <h1 className="text-[22px] sm:text-[24px] font-semibold text-foreground flex items-center gap-2.5 tracking-tight">
+            <Settings className="w-6 h-6 text-primary" />
             Configuración de Productos Financieros
           </h1>
-          <p className="text-sm text-slate-400">
-            Definición de tasas de interés global, plazos únicos en cuotas y penalizaciones por mora.
+          <p className="text-[13px] text-text-muted mt-1">
+            Definición de tasas de interés global, plazos únicos en cuotas y esquemas de penalización por mora.
           </p>
         </div>
 
-        <button
-          onClick={openNewModal}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-extrabold text-sm shadow-lg shadow-emerald-500/20 transition-all"
-        >
-          <Plus className="w-4 h-4 stroke-[3]" />
-          Nuevo Producto
-        </button>
-      </div>
+        <div className="flex items-center gap-2">
+          {/* Switch de Vistas (Tabla / Tarjetas) */}
+          <div className="flex items-center border border-border rounded-[4px] bg-white p-0.5">
+            <Button
+              type="button"
+              variant={viewMode === 'table' ? 'secondary' : 'ghost'}
+              size="sm"
+              onClick={() => setViewMode('table')}
+              className="h-[28px] px-2 text-[12px] gap-1"
+              title="Vista de Tabla"
+            >
+              <TableIcon className="w-3.5 h-3.5" />
+              Tabla
+            </Button>
+            <Button
+              type="button"
+              variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
+              size="sm"
+              onClick={() => setViewMode('grid')}
+              className="h-[28px] px-2 text-[12px] gap-1"
+              title="Vista de Tarjetas"
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+              Tarjetas
+            </Button>
+          </div>
 
-      {/* Grid of Financial Products */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-        {activeVisibleProducts.map((product) => (
-          <div
-            key={product.id}
-            className={`glass-panel p-6 rounded-2xl border transition-all flex flex-col justify-between ${
-              product.activo ? 'border-slate-800 hover:border-emerald-500/40' : 'border-slate-800/50 opacity-60'
-            }`}
+          <Button
+            onClick={openNewModal}
+            variant="stripe-actions"
+            className="h-[34px] px-3.5 text-[13px] font-medium"
           >
-            <div>
-              <div className="flex items-start justify-between gap-3 mb-3">
-                <div>
-                  <h3 className="text-lg font-bold text-white tracking-tight">{product.nombre}</h3>
-                  <span className="capitalize text-xs font-semibold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                    Frecuencia: {product.frecuenciaPago}
-                  </span>
-                </div>
-                <button
-                  onClick={() => handleToggleStatus(product)}
-                  className={`p-1.5 rounded-lg border transition-all ${
-                    product.activo
-                      ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
-                      : 'bg-slate-800 text-slate-500 border-slate-700'
-                  }`}
-                  title={product.activo ? 'Desactivar producto' : 'Activar producto'}
-                >
-                  {product.activo ? <CheckCircle2 className="w-5 h-5" /> : <XCircle className="w-5 h-5" />}
-                </button>
-              </div>
-
-              <p className="text-xs text-slate-400 mb-4 line-clamp-2">{product.descripcion}</p>
-
-              <div className="grid grid-cols-2 gap-3 mb-4">
-                <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800">
-                  <div className="flex items-center gap-1 text-[11px] font-semibold text-slate-400">
-                    <Percent className="w-3.5 h-3.5 text-emerald-400" /> Tasa Interés Global
-                  </div>
-                  <p className="text-lg font-extrabold text-white mt-0.5">{product.tasaInteresGlobal}%</p>
-                </div>
-
-                <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800">
-                  <div className="flex items-center gap-1 text-[11px] font-semibold text-slate-400">
-                    <ShieldAlert className="w-3.5 h-3.5 text-rose-400" /> Recargo por Mora
-                  </div>
-                  <p className="text-sm font-extrabold text-rose-300 mt-1">
-                    {product.tipoPenalizacionMora === 'monto_fijo'
-                      ? `${formatCurrency(product.valorPenalizacionMora || 0)}`
-                      : `${product.valorPenalizacionMora ?? 0}%`}
-                  </p>
-                </div>
-              </div>
-
-              <div className="space-y-2 text-xs border-t border-slate-800/80 pt-3">
-                <div className="flex justify-between text-slate-300">
-                  <span className="text-slate-400 flex items-center gap-1">
-                    <Calendar className="w-3.5 h-3.5 text-white" /> Plazo:
-                  </span>
-                  <span className="font-bold text-white">{product.plazo} cuotas ({product.frecuenciaPago})</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-5 pt-3 border-t border-slate-800/60 flex items-center justify-between gap-2">
-              <button
-                onClick={() => setDeletingProduct(product)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 transition-all"
-                title="Eliminar producto"
-              >
-                <Trash2 className="w-3.5 h-3.5" /> Eliminar
-              </button>
-
-              <button
-                onClick={() => openEditModal(product)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-300 bg-slate-800/80 hover:bg-slate-700 border border-slate-700 transition-all"
-              >
-                <Edit3 className="w-3.5 h-3.5" /> Editar
-              </button>
-            </div>
-          </div>
-        ))}
-
-        {activeVisibleProducts.length === 0 && (
-          <div className="col-span-full glass-panel p-8 text-center text-slate-400 text-xs rounded-2xl border border-slate-800">
-            No hay productos financieros activos registrados.
-          </div>
-        )}
+            <Plus className="w-4 h-4 mr-1 stroke-[2.5]" />
+            + Nuevo Producto
+          </Button>
+        </div>
       </div>
 
-      {/* Modal de Confirmación */}
+      {/* Quick Summary Cards (Stripe Dashboard Solid Cards) */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <Card className="p-4 bg-card border border-border rounded-[6px] shadow-2xs">
+          <span className="text-[11.5px] font-medium text-text-muted uppercase tracking-wider block">
+            Productos Totales
+          </span>
+          <div className="text-[20px] font-semibold text-foreground font-mono mt-1">
+            {activeVisibleProducts.length}
+          </div>
+          <span className="text-[12px] text-text-muted mt-0.5 block">
+            Catálogo institucional registrado
+          </span>
+        </Card>
+
+        <Card className="p-4 bg-card border border-border rounded-[6px] shadow-2xs">
+          <span className="text-[11.5px] font-medium text-text-muted uppercase tracking-wider block">
+            Productos Activos
+          </span>
+          <div className="text-[20px] font-semibold text-foreground font-mono mt-1">
+            {activeCount}
+          </div>
+          <span className="text-[12px] text-badge-success-text font-medium mt-0.5 block">
+            Disponibles para nuevas solicitudes
+          </span>
+        </Card>
+
+        <Card className="p-4 bg-card border border-border rounded-[6px] shadow-2xs">
+          <span className="text-[11.5px] font-medium text-text-muted uppercase tracking-wider block">
+            Frecuencias Soportadas
+          </span>
+          <div className="text-[20px] font-semibold text-foreground font-mono mt-1">
+            2
+          </div>
+          <span className="text-[12px] text-text-muted mt-0.5 block">
+            Semanal y Diario para microcrédito
+          </span>
+        </Card>
+      </div>
+
+      {/* Catálogo de Productos - Vista de Tabla (Primaria) */}
+      {viewMode === 'table' ? (
+        <Card className="border border-border rounded-[6px] shadow-2xs overflow-hidden bg-card">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="min-w-[220px]">Producto & Descripción</TableHead>
+                <TableHead className="min-w-[120px]">Frecuencia</TableHead>
+                <TableHead className="min-w-[110px]">Plazo</TableHead>
+                <TableHead className="text-right min-w-[130px]">Tasa Global</TableHead>
+                <TableHead className="text-right min-w-[160px]">Penalización Mora</TableHead>
+                <TableHead className="min-w-[110px]">Estatus</TableHead>
+                <TableHead className="text-right min-w-[180px]">Acciones</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {activeVisibleProducts.map((product) => (
+                <TableRow key={product.id}>
+                  {/* Nombre & Descripción */}
+                  <TableCell>
+                    <div className="space-y-0.5">
+                      <p className="font-semibold text-foreground text-[13px]">{product.nombre}</p>
+                      <p className="text-[12px] text-text-muted line-clamp-1 max-w-[280px]">
+                        {product.descripcion || 'Sin descripción'}
+                      </p>
+                    </div>
+                  </TableCell>
+
+                  {/* Frecuencia */}
+                  <TableCell>
+                    <Badge variant="outline" className="capitalize text-[11px] font-medium">
+                      {product.frecuenciaPago}
+                    </Badge>
+                  </TableCell>
+
+                  {/* Plazo */}
+                  <TableCell>
+                    <span className="font-mono text-[13px] text-foreground font-medium">
+                      {product.plazo} cuotas
+                    </span>
+                  </TableCell>
+
+                  {/* Tasa Interés Global */}
+                  <TableCell className="text-right font-mono text-[13px] font-semibold text-foreground">
+                    {product.tasaInteresGlobal}%
+                  </TableCell>
+
+                  {/* Penalización Mora */}
+                  <TableCell className="text-right font-mono text-[13px] text-text-secondary">
+                    {product.tipoPenalizacionMora === 'monto_fijo' ? (
+                      <span>{formatCurrency(product.valorPenalizacionMora || 0)}</span>
+                    ) : (
+                      <span>{product.valorPenalizacionMora ?? 0}%</span>
+                    )}
+                    <span className="block text-[11px] text-text-muted font-sans">
+                      {product.tipoPenalizacionMora === 'monto_fijo' ? 'Fijo / cuota' : 'Porcentaje'}
+                    </span>
+                  </TableCell>
+
+                  {/* Estatus */}
+                  <TableCell>
+                    {product.activo ? (
+                      <Badge variant="success" className="text-[11px]">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        Activo
+                      </Badge>
+                    ) : (
+                      <Badge variant="secondary" className="text-[11px]">
+                        <XCircle className="w-3.5 h-3.5" />
+                        Inactivo
+                      </Badge>
+                    )}
+                  </TableCell>
+
+                  {/* Acciones */}
+                  <TableCell className="text-right">
+                    <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleToggleStatus(product)}
+                        className="h-[28px] px-2 text-[12px] text-text-secondary hover:text-foreground"
+                        title={product.activo ? 'Desactivar producto' : 'Activar producto'}
+                      >
+                        {product.activo ? 'Desactivar' : 'Activar'}
+                      </Button>
+
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => openEditModal(product)}
+                        className="h-[28px] px-2.5 text-[12px]"
+                      >
+                        <Edit3 className="w-3.5 h-3.5 mr-1" />
+                        Editar
+                      </Button>
+
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setDeletingProduct(product)}
+                        className="h-[28px] px-2.5 text-[12px] text-badge-danger-text hover:bg-badge-danger-bg/50 border-badge-danger-text/20"
+                        title="Eliminar producto"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 mr-1" />
+                        Eliminar
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+
+              {activeVisibleProducts.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={7} className="p-8 text-center text-text-muted text-[13px]">
+                    No hay productos financieros activos registrados.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </Card>
+      ) : (
+        /* Vista de Tarjetas (Alternativa) */
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {activeVisibleProducts.map((product) => (
+            <Card
+              key={product.id}
+              className={`rounded-[6px] border border-border bg-card p-5 shadow-2xs flex flex-col justify-between transition-colors ${
+                !product.activo ? 'opacity-65' : ''
+              }`}
+            >
+              <div>
+                <div className="flex items-start justify-between gap-3 mb-2.5">
+                  <div>
+                    <h3 className="text-[15px] font-semibold text-foreground tracking-tight">{product.nombre}</h3>
+                    <div className="flex items-center gap-1.5 mt-1">
+                      <Badge variant="outline" className="capitalize text-[11px] font-medium">
+                        Frecuencia: {product.frecuenciaPago}
+                      </Badge>
+                      {product.activo ? (
+                        <Badge variant="success" className="text-[11px]">
+                          Activo
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary" className="text-[11px]">
+                          Inactivo
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => handleToggleStatus(product)}
+                    className="h-7 w-7 text-text-muted hover:text-foreground"
+                    title={product.activo ? 'Desactivar producto' : 'Activar producto'}
+                  >
+                    {product.activo ? <CheckCircle2 className="w-4 h-4 text-badge-success-text" /> : <XCircle className="w-4 h-4 text-text-muted" />}
+                  </Button>
+                </div>
+
+                <p className="text-[12.5px] text-text-muted mb-4 line-clamp-2">
+                  {product.descripcion || 'Sin descripción detallada.'}
+                </p>
+
+                <div className="grid grid-cols-2 gap-2.5 mb-3.5">
+                  <div className="p-2.5 rounded-[4px] bg-surface-subtle border border-border">
+                    <span className="flex items-center gap-1 text-[11px] font-medium text-text-muted">
+                      <Percent className="w-3 h-3 text-primary" /> Tasa Interés Global
+                    </span>
+                    <p className="text-[16px] font-semibold text-foreground font-mono mt-0.5">
+                      {product.tasaInteresGlobal}%
+                    </p>
+                  </div>
+
+                  <div className="p-2.5 rounded-[4px] bg-surface-subtle border border-border">
+                    <span className="flex items-center gap-1 text-[11px] font-medium text-text-muted">
+                      <ShieldAlert className="w-3 h-3 text-badge-danger-text" /> Recargo por Mora
+                    </span>
+                    <p className="text-[14px] font-semibold text-badge-danger-text font-mono mt-0.5">
+                      {product.tipoPenalizacionMora === 'monto_fijo'
+                        ? `${formatCurrency(product.valorPenalizacionMora || 0)}`
+                        : `${product.valorPenalizacionMora ?? 0}%`}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-border flex items-center justify-between text-[12px] text-text-secondary">
+                  <span className="text-text-muted flex items-center gap-1">
+                    <Calendar className="w-3.5 h-3.5" /> Plazo:
+                  </span>
+                  <span className="font-semibold text-foreground font-mono">
+                    {product.plazo} cuotas ({product.frecuenciaPago})
+                  </span>
+                </div>
+              </div>
+
+              <div className="mt-4 pt-3 border-t border-border flex items-center justify-between gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setDeletingProduct(product)}
+                  className="h-[28px] px-2.5 text-[12px] text-badge-danger-text hover:bg-badge-danger-bg/50 border-badge-danger-text/20"
+                >
+                  <Trash2 className="w-3.5 h-3.5 mr-1" /> Eliminar
+                </Button>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => openEditModal(product)}
+                  className="h-[28px] px-2.5 text-[12px]"
+                >
+                  <Edit3 className="w-3.5 h-3.5 mr-1" /> Editar
+                </Button>
+              </div>
+            </Card>
+          ))}
+
+          {activeVisibleProducts.length === 0 && (
+            <Card className="col-span-full p-8 text-center text-text-muted text-[13px] border border-border bg-card rounded-[6px]">
+              No hay productos financieros activos registrados.
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* Modal de Confirmación para Deshabilitar */}
       <ConfirmModal
         isOpen={!!deletingProduct}
         onClose={() => setDeletingProduct(null)}
         onConfirm={handleDelete}
         title="Deshabilitar Producto Financiero"
-        message={`¿Estás seguro de deshabilitar el producto "${deletingProduct?.nombre}"? No estará disponible para nuevas solicitudes.`}
+        message={`¿Estás seguro de deshabilitar el producto "${deletingProduct?.nombre}"? No estará disponible para nuevas solicitudes de crédito.`}
         confirmText="Sí, Deshabilitar"
         cancelText="Cancelar"
         variant="danger"
       />
 
-      {/* Modal Creación / Edición */}
+      {/* Modal Creación / Edición de Producto (Stripe Styled) */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div ref={modalScrollRef} className="glass-panel w-full max-w-lg p-6 rounded-2xl border border-slate-800 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center pb-2 border-b border-slate-800">
-              <h2 className="text-xl font-extrabold text-white flex items-center gap-2">
-                <Settings className="w-6 h-6 text-emerald-400" />
+        <div
+          className="fixed inset-0 z-50 bg-foreground/40 backdrop-blur-[2px] flex items-center justify-center p-4"
+          onClick={(e) => {
+            // Regla estricta: No cerrar modal al hacer click en el backdrop
+            e.stopPropagation();
+          }}
+        >
+          <div
+            ref={modalScrollRef}
+            className="bg-card text-card-foreground w-full max-w-lg p-6 rounded-[8px] border border-border shadow-lg space-y-4 max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center pb-2 border-b border-border">
+              <h2 className="text-[16px] font-semibold text-foreground flex items-center gap-2">
+                <Settings className="w-5 h-5 text-primary" />
                 {editingProductId ? 'Editar Producto Financiero' : 'Nuevo Producto Financiero'}
               </h2>
 
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="icon"
                 onClick={() => setIsModalOpen(false)}
-                className="text-slate-400 hover:text-white p-1 text-base"
+                className="h-8 w-8 text-text-muted hover:text-foreground rounded-[4px]"
                 title="Cerrar modal (Esc)"
               >
-                ✕
-              </button>
+                <X className="w-4 h-4" />
+              </Button>
             </div>
 
             {/* Error Banner */}
             {errorMsg && (
-              <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/40 text-rose-300 text-xs font-semibold flex items-center gap-2.5 shadow-lg shadow-rose-500/10">
-                <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+              <div className="p-3 rounded-[6px] bg-badge-danger-bg border border-badge-danger-text/20 text-badge-danger-text text-[12.5px] font-medium flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
                 <span>{errorMsg}</span>
               </div>
             )}
 
-            <form onSubmit={handleSave} noValidate className="space-y-4 text-xs">
+            <form onSubmit={handleSave} noValidate className="space-y-4 text-[13px]">
+              {/* 1. Nombre */}
               <div>
-                <label className="block text-slate-300 font-semibold mb-1">Nombre del Producto *</label>
-                <input
+                <label className="block text-text-secondary font-medium mb-1.5">
+                  Nombre del Producto *
+                </label>
+                <Input
                   type="text"
                   required
                   value={nombre}
                   onChange={(e) => setNombre(e.target.value)}
-                  placeholder="Ej: Impulso Quincenal Negocio"
-                  className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-sm focus:outline-none focus:border-emerald-500"
+                  placeholder="Ej: Microcrédito Negocio Semanal"
+                  className="h-[36px]"
                 />
               </div>
 
+              {/* Descripción */}
               <div>
-                <label className="block text-slate-300 font-semibold mb-1">Descripción</label>
+                <label className="block text-text-secondary font-medium mb-1.5">
+                  Descripción
+                </label>
                 <textarea
                   rows={2}
                   value={descripcion}
                   onChange={(e) => setDescripcion(e.target.value)}
-                  placeholder="Resumen del público objetivo o condiciones..."
-                  className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500"
+                  placeholder="Resumen del público objetivo o condiciones de colocación..."
+                  className="w-full px-3 py-2 rounded-[4px] border border-border bg-white text-foreground text-[13px] placeholder:text-text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:border-primary transition-colors"
                 />
               </div>
 
+              {/* 2. Frecuencia y Plazo */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Frecuencia de Pago *</label>
+                  <label className="block text-text-secondary font-medium mb-1.5">
+                    Frecuencia de Pago *
+                  </label>
                   <select
                     value={frecuenciaPago}
                     onChange={(e) => setFrecuenciaPago(e.target.value as FrecuenciaPago)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500"
+                    className="w-full h-[36px] px-3 py-1.5 rounded-[4px] border border-border bg-white text-foreground text-[13px] font-normal focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
                   >
                     <option value="semanal">Semanal</option>
                     <option value="diario">Diario</option>
@@ -402,105 +657,110 @@ export default function ProductsPage() {
                 </div>
 
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Plazo (Número de Cuotas) *</label>
-                  <input
+                  <label className="block text-text-secondary font-medium mb-1.5">
+                    Plazo (Número de Cuotas) *
+                  </label>
+                  <Input
                     type="number"
                     inputMode="numeric"
                     required
                     value={plazo}
                     onChange={(e) => setPlazo(e.target.value)}
                     placeholder="Ej: 10"
-                    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    className="h-[36px] font-mono [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   />
                 </div>
               </div>
 
+              {/* 3. Tasa de Interés Global */}
               <div>
-                <label className="block text-slate-300 font-semibold mb-1">Tasa de Interés Global (%) *</label>
-                <input
+                <label className="block text-text-secondary font-medium mb-1.5">
+                  Tasa de Interés Global (%) *
+                </label>
+                <Input
                   type="number"
                   inputMode="decimal"
                   required
                   value={tasaInteresGlobal}
                   onChange={(e) => setTasaInteresGlobal(e.target.value)}
                   placeholder="Ej: 15"
-                  className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  className="h-[36px] font-mono [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
               </div>
 
-              {/* Penalización por Mora Configurable */}
-              <div className="p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 space-y-3">
-                <label className="block text-slate-300 font-semibold">Penalización por Mora (Por Pago Atrasado) *</label>
-                
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setTipoPenalizacionMora('porcentaje')}
-                    className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-                      tipoPenalizacionMora === 'porcentaje'
-                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-sm'
-                        : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-white'
-                    }`}
-                  >
-                    <Percent className="w-3.5 h-3.5" /> Porcentaje (%)
-                  </button>
+              {/* 4. Penalización por Mora Configurable */}
+              <div className="p-3.5 rounded-[6px] bg-surface-subtle border border-border space-y-3">
+                <label className="block text-text-secondary font-medium">
+                  Penalización por Mora (Por Pago Atrasado) *
+                </label>
 
-                  <button
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
                     type="button"
-                    onClick={() => setTipoPenalizacionMora('monto_fijo')}
-                    className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-                      tipoPenalizacionMora === 'monto_fijo'
-                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-sm'
-                        : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-white'
-                    }`}
+                    variant={tipoPenalizacionMora === 'porcentaje' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setTipoPenalizacionMora('porcentaje')}
+                    className="h-[32px] text-[12px]"
                   >
-                    <span>$</span> Monto Fijo ($ MXN)
-                  </button>
+                    <Percent className="w-3.5 h-3.5 mr-1" /> Porcentaje (%)
+                  </Button>
+
+                  <Button
+                    type="button"
+                    variant={tipoPenalizacionMora === 'monto_fijo' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setTipoPenalizacionMora('monto_fijo')}
+                    className="h-[32px] text-[12px]"
+                  >
+                    <span className="mr-1">$</span> Monto Fijo ($ MXN)
+                  </Button>
                 </div>
 
                 <div>
-                  <label className="block text-slate-400 text-[11px] font-medium mb-1">
+                  <label className="block text-text-muted text-[11.5px] font-medium mb-1">
                     {tipoPenalizacionMora === 'porcentaje'
                       ? 'Porcentaje por cuota vencida (%):'
                       : 'Monto fijo en pesos por cuota vencida ($ MXN):'}
                   </label>
-                  <input
+                  <Input
                     type="number"
                     inputMode="decimal"
                     required
                     value={valorPenalizacionMora}
                     onChange={(e) => setValorPenalizacionMora(e.target.value)}
                     placeholder={tipoPenalizacionMora === 'porcentaje' ? 'Ej: 5' : 'Ej: 50'}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    className="h-[36px] font-mono [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   />
-                  <p className="text-[10px] text-slate-500 mt-1">
-                    Aplica acumulativamente por cada pago atrasado según la frecuencia del producto.
+                  <p className="text-[11px] text-text-muted mt-1">
+                    Aplica acumulativamente por cada cuota vencida según las reglas financieras del producto.
                   </p>
                 </div>
               </div>
 
-              <div className="pt-4 flex items-center justify-end gap-3 border-t border-slate-800">
-                <button
+              {/* Botones de Acción */}
+              <div className="pt-3 flex items-center justify-end gap-2.5 border-t border-border">
+                <Button
                   type="button"
+                  variant="outline"
                   disabled={isSaving}
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 font-semibold text-xs transition-all disabled:opacity-50"
                 >
                   Cancelar
-                </button>
-                <button
+                </Button>
+                <Button
                   type="submit"
+                  variant="stripe-actions"
                   disabled={isSaving}
-                  className="px-5 py-2 rounded-xl text-slate-950 bg-emerald-500 hover:bg-emerald-400 font-extrabold text-xs shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="gap-1.5"
                 >
                   {isSaving ? (
                     <>
-                      <Loader2 className="w-4 h-4 animate-spin" /> Guardando...
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Guardando...
                     </>
                   ) : (
                     'Guardar Producto'
                   )}
-                </button>
+                </Button>
               </div>
             </form>
           </div>
