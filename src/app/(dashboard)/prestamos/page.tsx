@@ -19,7 +19,6 @@ import {
   UserCheck,
   UserCog,
   Phone,
-  X,
 } from 'lucide-react';
 import { useImpulsoStore } from '@/store/useImpulsoStore';
 import { LoanStatusBadge, InstallmentStatusBadge } from '@/components/shared/StatusBadges';
@@ -31,6 +30,20 @@ import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 export default function LoansPage() {
   const { loans, users, currentUser, loadDataFromDB } = useImpulsoStore();
@@ -64,26 +77,6 @@ export default function LoansPage() {
       isMounted = false;
     };
   }, [loadDataFromDB]);
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        if (rejectModalLoan) {
-          setRejectModalLoan(null);
-          setMotivoRechazoInput('');
-          setRejectError(null);
-        } else if (reassignModalLoan) {
-          setReassignModalLoan(null);
-          setSelectedNewPromoterName('');
-          setReassignError(null);
-        } else if (selectedLoanModal) {
-          setSelectedLoanModal(null);
-        }
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedLoanModal, rejectModalLoan, reassignModalLoan]);
 
   const handleApprove = async (loanId: string) => {
     if (isProcessingAction) return;
@@ -291,19 +284,19 @@ export default function LoansPage() {
             <label htmlFor="loan-status-filter" className="text-[12px] text-text-muted font-medium whitespace-nowrap">
               Estatus:
             </label>
-            <select
-              id="loan-status-filter"
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="h-[34px] px-3 py-1 rounded-[4px] border border-border bg-white text-text-secondary text-[13px] font-medium focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors w-full md:w-auto"
-            >
-              <option value="todos">Todos los estatus</option>
-              <option value="En Evaluación">En Evaluación (Pendientes)</option>
-              <option value="Activo">Activos</option>
-              <option value="En Mora">En Mora</option>
-              <option value="Liquidado">Liquidados</option>
-              <option value="Rechazado">Rechazados</option>
-            </select>
+            <Select value={statusFilter} onValueChange={(val) => setStatusFilter(val)}>
+              <SelectTrigger id="loan-status-filter" className="h-[34px] w-full md:w-[220px] text-[13px] bg-white border-border">
+                <SelectValue placeholder="Todos los estatus" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos los estatus</SelectItem>
+                <SelectItem value="En Evaluación">En Evaluación (Pendientes)</SelectItem>
+                <SelectItem value="Activo">Activos</SelectItem>
+                <SelectItem value="En Mora">En Mora</SelectItem>
+                <SelectItem value="Liquidado">Liquidados</SelectItem>
+                <SelectItem value="Rechazado">Rechazados</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </CardContent>
       </Card>
@@ -487,453 +480,435 @@ export default function LoansPage() {
       </Card>
 
       {/* Modal Ver Tabla de Amortización & Detalle (Stripe Styled) */}
-      {selectedLoanModal && (
-        <div
-          className="fixed inset-0 z-50 bg-foreground/40 backdrop-blur-[2px] flex items-center justify-center p-4"
-          onClick={(e) => {
-            // Regla estricta: No cerrar modal al hacer click en el backdrop
-            e.stopPropagation();
-          }}
+      <Dialog
+        open={Boolean(selectedLoanModal)}
+        onOpenChange={(open) => {
+          if (!open) setSelectedLoanModal(null);
+        }}
+      >
+        <DialogContent
+          className="max-w-3xl max-h-[90vh] overflow-y-auto"
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onInteractOutside={(e) => e.preventDefault()}
         >
-          <div
-            className="bg-card text-card-foreground w-full max-w-3xl p-6 rounded-[8px] border border-border shadow-lg space-y-4 max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-150"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex justify-between items-start border-b border-border pb-3">
-              <div>
+          {selectedLoanModal && (
+            <div className="space-y-4">
+              <DialogHeader className="border-b border-border pb-3 pr-6 text-left">
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-[11px] bg-surface-subtle border border-border px-1.5 py-0.5 rounded-[4px] text-text-secondary font-medium">
                     {selectedLoanModal.folio}
                   </span>
                   <LoanStatusBadge status={selectedLoanModal.estatus} />
                 </div>
-                <h2 className="text-[18px] font-semibold text-foreground mt-1 tracking-tight">{selectedLoanModal.clienteNombre}</h2>
-                <p className="text-[12.5px] text-text-muted">
+                <DialogTitle className="text-[18px] font-semibold text-foreground mt-1 tracking-tight">
+                  {selectedLoanModal.clienteNombre}
+                </DialogTitle>
+                <DialogDescription className="text-[12.5px] text-text-muted">
                   Producto: {selectedLoanModal.productoNombre} ({selectedLoanModal.plazoCantidad} cuotas {selectedLoanModal.frecuenciaPago}s) • Promotor: {selectedLoanModal.promotorAsignado}
-                </p>
-              </div>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                onClick={() => setSelectedLoanModal(null)}
-                className="h-8 w-8 text-text-muted hover:text-foreground rounded-[4px]"
-                title="Cerrar modal (Esc)"
-              >
-                <X className="w-4 h-4" />
-              </Button>
-            </div>
+                </DialogDescription>
+              </DialogHeader>
 
-            {/* Banner de Rechazo si aplica */}
-            {selectedLoanModal.estatus === 'Rechazado' && selectedLoanModal.motivoRechazo && (
-              <div className="p-3.5 rounded-[6px] bg-badge-danger-bg border border-badge-danger-text/20 text-badge-danger-text text-[12.5px] space-y-1">
-                <div className="flex items-center gap-2 font-semibold">
-                  <XCircle className="w-4 h-4 shrink-0" />
-                  <span>Solicitud de Crédito Rechazada</span>
-                </div>
-                <p className="text-text-secondary pl-6">
-                  <strong>Motivo especificado por el Administrador:</strong> "{selectedLoanModal.motivoRechazo}"
-                </p>
-              </div>
-            )}
-
-            {/* Banner de Evaluación si aplica */}
-            {selectedLoanModal.estatus === 'En Evaluación' && (
-              <div className="p-3.5 rounded-[6px] bg-badge-warning-bg border border-badge-warning-text/20 text-badge-warning-text text-[12.5px] space-y-1">
-                <div className="flex items-center gap-2 font-semibold">
-                  <Clock className="w-4 h-4 shrink-0" />
-                  <span>Solicitud Pendiente de Evaluación</span>
-                </div>
-                <p className="text-text-secondary pl-6">
-                  Esta solicitud ingresada por un Promotor de Campo está pendiente de aprobación o rechazo por parte de un Administrador.
-                </p>
-              </div>
-            )}
-
-            {/* Bloque de Auditoría y Trazabilidad */}
-            <div className="p-3.5 rounded-[6px] bg-surface-subtle border border-border space-y-2.5 text-[12.5px]">
-              <h4 className="font-semibold text-foreground flex items-center gap-2 text-[13px]">
-                <ShieldCheck className="w-4 h-4 text-primary" /> Trazabilidad de Solicitud y Cobro
-              </h4>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="p-2.5 rounded-[4px] bg-card border border-border space-y-0.5">
-                  <span className="text-text-muted block text-[11px] font-medium">👤 Solicitado por:</span>
-                  <p className="font-semibold text-foreground text-[12.5px]">{selectedLoanModal.solicitadoPorNombre || selectedLoanModal.promotorAsignado || 'Carlos Mendoza'}</p>
-                  <p className="text-[11px] text-text-muted">{selectedLoanModal.solicitadoPorRol || selectedLoanModal.creadoPorRol || 'Promotor de Campo'}</p>
-                  <p className="text-[11px] text-text-muted font-mono">
-                    {selectedLoanModal.fechaHoraSolicitud ? formatDateWithTime(selectedLoanModal.fechaHoraSolicitud) : formatDate(selectedLoanModal.fechaInicio)}
-                  </p>
-                </div>
-
-                <div className="p-2.5 rounded-[4px] bg-card border border-border space-y-0.5">
-                  <span className="text-text-muted block text-[11px] font-medium">🛡️ Dictaminado por:</span>
-                  <p className="font-semibold text-foreground text-[12.5px]">
-                    {selectedLoanModal.aprobadoPorNombre || (selectedLoanModal.estatus === 'Activo' ? 'Carlos Mendoza' : selectedLoanModal.estatus === 'En Evaluación' ? 'Pendiente evaluación' : 'Sistema')}
-                  </p>
-                  <p className="text-[11px] text-text-muted">
-                    {selectedLoanModal.estatus === 'En Evaluación' ? 'Pendiente' : 'Administrador'}
-                  </p>
-                  <p className="text-[11px] text-text-muted font-mono">
-                    {selectedLoanModal.fechaHoraAprobacion ? formatDateWithTime(selectedLoanModal.fechaHoraAprobacion) : selectedLoanModal.estatus === 'En Evaluación' ? '-' : formatDate(selectedLoanModal.fechaInicio)}
-                  </p>
-                </div>
-
-                <div className="p-2.5 rounded-[4px] bg-card border border-border space-y-0.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-text-muted block text-[11px] font-medium">🚚 Promotor Asignado:</span>
-                    {isAdmin && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setReassignModalLoan(selectedLoanModal);
-                          setSelectedNewPromoterName(selectedLoanModal.promotorAsignado);
-                          setReassignError(null);
-                        }}
-                        className="text-[11px] text-link hover:underline font-medium"
-                      >
-                        Reasignar
-                      </button>
-                    )}
+              {/* Banner de Rechazo si aplica */}
+              {selectedLoanModal.estatus === 'Rechazado' && selectedLoanModal.motivoRechazo && (
+                <div className="p-3.5 rounded-[6px] bg-badge-danger-bg border border-badge-danger-text/20 text-badge-danger-text text-[12.5px] space-y-1">
+                  <div className="flex items-center gap-2 font-semibold">
+                    <XCircle className="w-4 h-4 shrink-0" />
+                    <span>Solicitud de Crédito Rechazada</span>
                   </div>
-                  <p className="font-semibold text-foreground text-[12.5px]">{selectedLoanModal.promotorAsignado}</p>
-                  {selectedLoanModal.promotorAsignadoTelefono && (
-                    <p className="text-[11px] text-text-muted font-mono flex items-center gap-1">
-                      <Phone className="w-3 h-3 text-primary shrink-0" />
-                      {selectedLoanModal.promotorAsignadoTelefono}
-                    </p>
-                  )}
-                  {selectedLoanModal.diaCobro && (
-                    <span className="text-[11px] text-text-muted block font-medium">
-                      Cobro: {selectedLoanModal.diaCobro}
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Métricas del Préstamo */}
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 text-[12.5px]">
-              <div className="p-2.5 rounded-[6px] bg-surface-subtle border border-border">
-                <span className="text-[11px] text-text-muted font-medium block">Monto Principal:</span>
-                <p className="font-semibold text-foreground font-mono text-[14px] mt-0.5">{formatCurrency(selectedLoanModal.montoPrincipal)}</p>
-              </div>
-              <div className="p-2.5 rounded-[6px] bg-surface-subtle border border-border">
-                <span className="text-[11px] text-text-muted font-medium block">Total a Pagar:</span>
-                <p className="font-semibold text-foreground font-mono text-[14px] mt-0.5">{formatCurrency(selectedLoanModal.totalAPagar)}</p>
-              </div>
-              <div className="p-2.5 rounded-[6px] bg-surface-subtle border border-border">
-                <span className="text-[11px] text-text-muted font-medium block">Saldo Pendiente:</span>
-                <p className="font-semibold text-foreground font-mono text-[14px] mt-0.5">{formatCurrency(selectedLoanModal.saldoPendiente)}</p>
-              </div>
-              <div className="p-2.5 rounded-[6px] bg-surface-subtle border border-border">
-                <span className="text-[11px] text-text-muted font-medium block">Día de Cobro:</span>
-                <p className="font-semibold text-foreground text-[13px] mt-0.5">{selectedLoanModal.diaCobro || 'No asignado'}</p>
-              </div>
-              <div className="p-2.5 rounded-[6px] bg-surface-subtle border border-border">
-                <span className="text-[11px] text-text-muted font-medium block">Fecha Solicitud:</span>
-                <p className="font-semibold text-foreground text-[13px] mt-0.5">
-                  {selectedLoanModal.fechaSolicitud ? formatDate(selectedLoanModal.fechaSolicitud) : 'No especificada'}
-                </p>
-              </div>
-            </div>
-
-            <h3 className="text-[14px] font-semibold text-foreground pt-1">Tabla de Amortización Completa</h3>
-
-            <Card className="border border-border rounded-[6px] shadow-2xs overflow-hidden">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="py-2">Cuota</TableHead>
-                    <TableHead className="py-2">Vencimiento</TableHead>
-                    <TableHead className="py-2 text-right">Cuota Total</TableHead>
-                    <TableHead className="py-2 text-right">Monto Pagado</TableHead>
-                    <TableHead className="py-2">Estado</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody className="text-[12.5px]">
-                  {selectedLoanModal.tablaAmortizacion.map((c) => {
-                    const isMora = c.estado === 'Mora' || c.estado === 'Vencido';
-                    const isEnRevision = c.estado === 'En Revisión';
-                    const isPagado = c.estado === 'Pagado';
-                    return (
-                      <TableRow
-                        key={c.numeroCuota}
-                        className={
-                          isEnRevision
-                            ? 'bg-primary-subtle/50'
-                            : isMora
-                            ? 'bg-badge-danger-bg/40'
-                            : isPagado
-                            ? 'bg-badge-success-bg/30'
-                            : ''
-                        }
-                      >
-                        <TableCell className="p-2.5 font-mono font-medium">#{c.numeroCuota}</TableCell>
-                        <TableCell className="p-2.5 font-sans text-text-secondary">{formatDateWithDay(c.fechaVencimiento)}</TableCell>
-                        <TableCell className="p-2.5 text-right font-mono font-medium">
-                          <div>
-                            <span className={isMora ? 'text-badge-danger-text font-semibold' : 'text-foreground'}>
-                              {formatCurrency(c.cuotaTotal)}
-                            </span>
-                            {c.recargoPenalizacion && c.recargoPenalizacion > 0 ? (
-                              <span className="block text-[11px] text-badge-danger-text font-sans">
-                                ⚠️ +{formatCurrency(c.recargoPenalizacion)} mora
-                              </span>
-                            ) : null}
-                          </div>
-                        </TableCell>
-                        <TableCell className="p-2.5 text-right font-mono text-badge-success-text font-medium">
-                          {formatCurrency(c.montoPagado)}
-                        </TableCell>
-                        <TableCell className="p-2.5">
-                          <InstallmentStatusBadge status={c.estado} />
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </Card>
-          </div>
-        </div>
-      )}
-
-      {/* Modal para Rechazar Solicitud de Crédito (Con Motivo Obligatorio) */}
-      {rejectModalLoan && (
-        <div
-          className="fixed inset-0 z-50 bg-foreground/40 backdrop-blur-[2px] flex items-center justify-center p-4"
-          onClick={(e) => {
-            // Regla estricta: No cerrar modal al hacer click en el backdrop
-            e.stopPropagation();
-          }}
-        >
-          <div
-            ref={rejectModalScrollRef}
-            className="bg-card text-card-foreground w-full max-w-md p-6 rounded-[8px] border border-border shadow-lg space-y-4 max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-150"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex justify-between items-center pb-2 border-b border-border">
-              <h2 className="text-[16px] font-semibold text-foreground flex items-center gap-2">
-                <XCircle className="w-5 h-5 text-badge-danger-text" />
-                Rechazar Solicitud de Crédito
-              </h2>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                disabled={isProcessingAction}
-                onClick={() => {
-                  setRejectModalLoan(null);
-                  setMotivoRechazoInput('');
-                  setRejectError(null);
-                }}
-                className="h-8 w-8 text-text-muted hover:text-foreground rounded-[4px]"
-                title="Cerrar modal (Esc)"
-              >
-                <X className="w-4 h-4" />
-              </Button>
-            </div>
-
-            <div className="p-3 rounded-[6px] bg-surface-subtle border border-border text-[12.5px] space-y-1">
-              <p className="text-text-muted">
-                Solicitud Folio: <span className="font-mono text-[11px] bg-white border border-border px-1.5 py-0.5 rounded-[4px] text-text-secondary font-medium">{rejectModalLoan.folio}</span>
-              </p>
-              <p className="text-foreground font-semibold">{rejectModalLoan.clienteNombre}</p>
-              <p className="text-text-muted">
-                Monto: <span className="font-mono">{formatCurrency(rejectModalLoan.montoPrincipal)}</span> • Producto: {rejectModalLoan.productoNombre}
-              </p>
-            </div>
-
-            {/* Error Banner */}
-            {rejectError && (
-              <div className="p-3 rounded-[6px] bg-badge-danger-bg border border-badge-danger-text/20 text-badge-danger-text text-[12.5px] font-medium flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0" />
-                <span>{rejectError}</span>
-              </div>
-            )}
-
-            <form onSubmit={handleConfirmReject} noValidate className="space-y-4 text-[13px]">
-              <div>
-                <label className="block text-text-secondary font-medium mb-1.5">
-                  Motivo de Rechazo * <span className="text-text-muted font-normal">(Obligatorio)</span>
-                </label>
-                <textarea
-                  required
-                  rows={4}
-                  disabled={isProcessingAction}
-                  placeholder="Explique detalladamente la razón por la cual se rechaza esta solicitud de crédito..."
-                  value={motivoRechazoInput}
-                  onChange={(e) => setMotivoRechazoInput(e.target.value)}
-                  className="w-full px-3 py-2 rounded-[4px] border border-border bg-white text-foreground text-[13px] placeholder:text-text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:border-primary disabled:opacity-50 transition-colors"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2.5 pt-3 border-t border-border">
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={isProcessingAction}
-                  onClick={() => {
-                    setRejectModalLoan(null);
-                    setMotivoRechazoInput('');
-                    setRejectError(null);
-                  }}
-                >
-                  Cancelar
-                </Button>
-                <Button
-                  type="submit"
-                  variant="destructive"
-                  disabled={isProcessingAction}
-                  className="gap-1.5"
-                >
-                  {isProcessingAction ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Procesando...
-                    </>
-                  ) : (
-                    <>
-                      <XCircle className="w-4 h-4" /> Confirmar Rechazo
-                    </>
-                  )}
-                </Button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Modal para Reasignar Promotor (Administrador) */}
-      {reassignModalLoan && (
-        <div
-          className="fixed inset-0 z-50 bg-foreground/40 backdrop-blur-[2px] flex items-center justify-center p-4"
-          onClick={(e) => {
-            // Regla estricta: No cerrar modal al hacer click en el backdrop
-            e.stopPropagation();
-          }}
-        >
-          <div
-            className="bg-card text-card-foreground w-full max-w-md p-6 rounded-[8px] border border-border shadow-lg space-y-4 max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-150"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex justify-between items-center pb-2 border-b border-border">
-              <h2 className="text-[16px] font-semibold text-foreground flex items-center gap-2">
-                <UserCog className="w-5 h-5 text-primary" />
-                Reasignar Promotor de Cobro
-              </h2>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                disabled={isProcessingAction}
-                onClick={() => {
-                  setReassignModalLoan(null);
-                  setSelectedNewPromoterName('');
-                  setReassignError(null);
-                }}
-                className="h-8 w-8 text-text-muted hover:text-foreground rounded-[4px]"
-                title="Cerrar modal (Esc)"
-              >
-                <X className="w-4 h-4" />
-              </Button>
-            </div>
-
-            <div className="p-3 rounded-[6px] bg-surface-subtle border border-border text-[12.5px] space-y-1">
-              <p className="text-text-muted">
-                Préstamo Folio: <span className="font-mono text-[11px] bg-white border border-border px-1.5 py-0.5 rounded-[4px] text-text-secondary font-medium">{reassignModalLoan.folio}</span>
-              </p>
-              <p className="text-foreground font-semibold">{reassignModalLoan.clienteNombre}</p>
-              <p className="text-text-muted">
-                Promotor Actual: <strong className="text-foreground font-medium">{reassignModalLoan.promotorAsignado}</strong> (Día: {reassignModalLoan.diaCobro || 'Sin día'})
-              </p>
-            </div>
-
-            {/* Banner de Error */}
-            {reassignError && (
-              <div className="p-3 rounded-[6px] bg-badge-danger-bg border border-badge-danger-text/20 text-badge-danger-text text-[12.5px] font-medium flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0" />
-                <span>{reassignError}</span>
-              </div>
-            )}
-
-            <form onSubmit={handleConfirmReassign} noValidate className="space-y-4 text-[13px]">
-              <div>
-                <label className="block text-text-secondary font-medium mb-1.5">
-                  Nuevo Promotor Asignado *
-                </label>
-                <select
-                  required
-                  disabled={isProcessingAction}
-                  value={selectedNewPromoterName}
-                  onChange={(e) => setSelectedNewPromoterName(e.target.value)}
-                  className="w-full h-[36px] px-3 py-1.5 rounded-[4px] border border-border bg-white text-foreground font-normal text-[13px] focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors disabled:opacity-50"
-                >
-                  <option value="">Selecciona un colaborador...</option>
-                  {users
-                    .filter((u) => u.estatus === 'Activo')
-                    .map((u) => (
-                      <option key={u.id} value={u.name}>
-                        {u.name} ({u.role}) - Cobro: {u.diaCobroAsignado || 'Sin día'}
-                      </option>
-                    ))}
-                </select>
-              </div>
-
-              {/* Vista previa del promotor seleccionado */}
-              {selectedNewPromoterName && (
-                <div className="p-3 rounded-[6px] bg-surface-subtle border border-border text-[12.5px] space-y-1 text-text-secondary">
-                  {(() => {
-                    const sel = users.find((u) => u.name === selectedNewPromoterName);
-                    if (!sel) return null;
-                    return (
-                      <>
-                        <p className="font-semibold text-foreground">Detalles del Nuevo Promotor:</p>
-                        <p>👤 Nombre: {sel.name}</p>
-                        <p>📞 Teléfono: {sel.telefono || 'Sin teléfono'}</p>
-                        <p>🗓️ Día de Cobro Asignado: <strong>{sel.diaCobroAsignado || 'Sin asignar'}</strong></p>
-                        <p className="text-[11px] text-text-muted pt-1">
-                          Nota: Al reasignar, el día de cobro del crédito se actualizará a <strong>{sel.diaCobroAsignado || 'Sin asignar'}</strong>.
-                        </p>
-                      </>
-                    );
-                  })()}
+                  <p className="text-text-secondary pl-6">
+                    <strong>Motivo especificado por el Administrador:</strong> &ldquo;{selectedLoanModal.motivoRechazo}&rdquo;
+                  </p>
                 </div>
               )}
 
-              <div className="flex justify-end gap-2.5 pt-3 border-t border-border">
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={isProcessingAction}
-                  onClick={() => {
-                    setReassignModalLoan(null);
-                    setSelectedNewPromoterName('');
-                    setReassignError(null);
-                  }}
-                >
-                  Cancelar
-                </Button>
-                <Button
-                  type="submit"
-                  variant="stripe-actions"
-                  disabled={isProcessingAction}
-                  className="gap-1.5"
-                >
-                  {isProcessingAction ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Guardando...
-                    </>
-                  ) : (
-                    <>
-                      <UserCheck className="w-4 h-4" /> Confirmar Reasignación
-                    </>
-                  )}
-                </Button>
+              {/* Banner de Evaluación si aplica */}
+              {selectedLoanModal.estatus === 'En Evaluación' && (
+                <div className="p-3.5 rounded-[6px] bg-badge-warning-bg border border-badge-warning-text/20 text-badge-warning-text text-[12.5px] space-y-1">
+                  <div className="flex items-center gap-2 font-semibold">
+                    <Clock className="w-4 h-4 shrink-0" />
+                    <span>Solicitud Pendiente de Evaluación</span>
+                  </div>
+                  <p className="text-text-secondary pl-6">
+                    Esta solicitud ingresada por un Promotor de Campo está pendiente de aprobación o rechazo por parte de un Administrador.
+                  </p>
+                </div>
+              )}
+
+              {/* Bloque de Auditoría y Trazabilidad */}
+              <div className="p-3.5 rounded-[6px] bg-surface-subtle border border-border space-y-2.5 text-[12.5px]">
+                <h4 className="font-semibold text-foreground flex items-center gap-2 text-[13px]">
+                  <ShieldCheck className="w-4 h-4 text-primary" /> Trazabilidad de Solicitud y Cobro
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="p-2.5 rounded-[4px] bg-card border border-border space-y-0.5">
+                    <span className="text-text-muted block text-[11px] font-medium">👤 Solicitado por:</span>
+                    <p className="font-semibold text-foreground text-[12.5px]">{selectedLoanModal.solicitadoPorNombre || selectedLoanModal.promotorAsignado || 'Carlos Mendoza'}</p>
+                    <p className="text-[11px] text-text-muted">{selectedLoanModal.solicitadoPorRol || selectedLoanModal.creadoPorRol || 'Promotor de Campo'}</p>
+                    <p className="text-[11px] text-text-muted font-mono">
+                      {selectedLoanModal.fechaHoraSolicitud ? formatDateWithTime(selectedLoanModal.fechaHoraSolicitud) : formatDate(selectedLoanModal.fechaInicio)}
+                    </p>
+                  </div>
+
+                  <div className="p-2.5 rounded-[4px] bg-card border border-border space-y-0.5">
+                    <span className="text-text-muted block text-[11px] font-medium">🛡️ Dictaminado por:</span>
+                    <p className="font-semibold text-foreground text-[12.5px]">
+                      {selectedLoanModal.aprobadoPorNombre || (selectedLoanModal.estatus === 'Activo' ? 'Carlos Mendoza' : selectedLoanModal.estatus === 'En Evaluación' ? 'Pendiente evaluación' : 'Sistema')}
+                    </p>
+                    <p className="text-[11px] text-text-muted">
+                      {selectedLoanModal.estatus === 'En Evaluación' ? 'Pendiente' : 'Administrador'}
+                    </p>
+                    <p className="text-[11px] text-text-muted font-mono">
+                      {selectedLoanModal.fechaHoraAprobacion ? formatDateWithTime(selectedLoanModal.fechaHoraAprobacion) : selectedLoanModal.estatus === 'En Evaluación' ? '-' : formatDate(selectedLoanModal.fechaInicio)}
+                    </p>
+                  </div>
+
+                  <div className="p-2.5 rounded-[4px] bg-card border border-border space-y-0.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-text-muted block text-[11px] font-medium">🚚 Promotor Asignado:</span>
+                      {isAdmin && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setReassignModalLoan(selectedLoanModal);
+                            setSelectedNewPromoterName(selectedLoanModal.promotorAsignado);
+                            setReassignError(null);
+                          }}
+                          className="text-[11px] text-link hover:underline font-medium"
+                        >
+                          Reasignar
+                        </button>
+                      )}
+                    </div>
+                    <p className="font-semibold text-foreground text-[12.5px]">{selectedLoanModal.promotorAsignado}</p>
+                    {selectedLoanModal.promotorAsignadoTelefono && (
+                      <p className="text-[11px] text-text-muted font-mono flex items-center gap-1">
+                        <Phone className="w-3 h-3 text-primary shrink-0" />
+                        {selectedLoanModal.promotorAsignadoTelefono}
+                      </p>
+                    )}
+                    {selectedLoanModal.diaCobro && (
+                      <span className="text-[11px] text-text-muted block font-medium">
+                        Cobro: {selectedLoanModal.diaCobro}
+                      </span>
+                    )}
+                  </div>
+                </div>
               </div>
-            </form>
-          </div>
-        </div>
-      )}
+
+              {/* Métricas del Préstamo */}
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 text-[12.5px]">
+                <div className="p-2.5 rounded-[6px] bg-surface-subtle border border-border">
+                  <span className="text-[11px] text-text-muted font-medium block">Monto Principal:</span>
+                  <p className="font-semibold text-foreground font-mono text-[14px] mt-0.5">{formatCurrency(selectedLoanModal.montoPrincipal)}</p>
+                </div>
+                <div className="p-2.5 rounded-[6px] bg-surface-subtle border border-border">
+                  <span className="text-[11px] text-text-muted font-medium block">Total a Pagar:</span>
+                  <p className="font-semibold text-foreground font-mono text-[14px] mt-0.5">{formatCurrency(selectedLoanModal.totalAPagar)}</p>
+                </div>
+                <div className="p-2.5 rounded-[6px] bg-surface-subtle border border-border">
+                  <span className="text-[11px] text-text-muted font-medium block">Saldo Pendiente:</span>
+                  <p className="font-semibold text-foreground font-mono text-[14px] mt-0.5">{formatCurrency(selectedLoanModal.saldoPendiente)}</p>
+                </div>
+                <div className="p-2.5 rounded-[6px] bg-surface-subtle border border-border">
+                  <span className="text-[11px] text-text-muted font-medium block">Día de Cobro:</span>
+                  <p className="font-semibold text-foreground text-[13px] mt-0.5">{selectedLoanModal.diaCobro || 'No asignado'}</p>
+                </div>
+                <div className="p-2.5 rounded-[6px] bg-surface-subtle border border-border">
+                  <span className="text-[11px] text-text-muted font-medium block">Fecha Solicitud:</span>
+                  <p className="font-semibold text-foreground text-[13px] mt-0.5">
+                    {selectedLoanModal.fechaSolicitud ? formatDate(selectedLoanModal.fechaSolicitud) : 'No especificada'}
+                  </p>
+                </div>
+              </div>
+
+              <h3 className="text-[14px] font-semibold text-foreground pt-1">Tabla de Amortización Completa</h3>
+
+              <Card className="border border-border rounded-[6px] shadow-2xs overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="py-2">Cuota</TableHead>
+                      <TableHead className="py-2">Vencimiento</TableHead>
+                      <TableHead className="py-2 text-right">Cuota Total</TableHead>
+                      <TableHead className="py-2 text-right">Monto Pagado</TableHead>
+                      <TableHead className="py-2">Estado</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody className="text-[12.5px]">
+                    {selectedLoanModal.tablaAmortizacion.map((c) => {
+                      const isMora = c.estado === 'Mora' || c.estado === 'Vencido';
+                      const isEnRevision = c.estado === 'En Revisión';
+                      const isPagado = c.estado === 'Pagado';
+                      return (
+                        <TableRow
+                          key={c.numeroCuota}
+                          className={
+                            isEnRevision
+                              ? 'bg-primary-subtle/50'
+                              : isMora
+                              ? 'bg-badge-danger-bg/40'
+                              : isPagado
+                              ? 'bg-badge-success-bg/30'
+                              : ''
+                          }
+                        >
+                          <TableCell className="p-2.5 font-mono font-medium">#{c.numeroCuota}</TableCell>
+                          <TableCell className="p-2.5 font-sans text-text-secondary">{formatDateWithDay(c.fechaVencimiento)}</TableCell>
+                          <TableCell className="p-2.5 text-right font-mono font-medium">
+                            <div>
+                              <span className={isMora ? 'text-badge-danger-text font-semibold' : 'text-foreground'}>
+                                {formatCurrency(c.cuotaTotal)}
+                              </span>
+                              {c.recargoPenalizacion && c.recargoPenalizacion > 0 ? (
+                                <span className="block text-[11px] text-badge-danger-text font-sans">
+                                  ⚠️ +{formatCurrency(c.recargoPenalizacion)} mora
+                                </span>
+                              ) : null}
+                            </div>
+                          </TableCell>
+                          <TableCell className="p-2.5 text-right font-mono text-badge-success-text font-medium">
+                            {formatCurrency(c.montoPagado)}
+                          </TableCell>
+                          <TableCell className="p-2.5">
+                            <InstallmentStatusBadge status={c.estado} />
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </Card>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal para Rechazar Solicitud de Crédito (Con Motivo Obligatorio) */}
+      <Dialog
+        open={Boolean(rejectModalLoan)}
+        onOpenChange={(open) => {
+          if (!open && !isProcessingAction) {
+            setRejectModalLoan(null);
+            setMotivoRechazoInput('');
+            setRejectError(null);
+          }
+        }}
+      >
+        <DialogContent
+          ref={rejectModalScrollRef}
+          className="max-w-md max-h-[90vh] overflow-y-auto"
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onInteractOutside={(e) => e.preventDefault()}
+        >
+          {rejectModalLoan && (
+            <div className="space-y-4">
+              <DialogHeader className="border-b border-border pb-2 pr-6 text-left">
+                <DialogTitle className="text-[16px] font-semibold text-foreground flex items-center gap-2">
+                  <XCircle className="w-5 h-5 text-badge-danger-text" />
+                  Rechazar Solicitud de Crédito
+                </DialogTitle>
+                <DialogDescription className="text-[12px] text-text-muted">
+                  Ingresa el motivo del dictamen para archivar esta solicitud.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="p-3 rounded-[6px] bg-surface-subtle border border-border text-[12.5px] space-y-1">
+                <p className="text-text-muted">
+                  Solicitud Folio: <span className="font-mono text-[11px] bg-white border border-border px-1.5 py-0.5 rounded-[4px] text-text-secondary font-medium">{rejectModalLoan.folio}</span>
+                </p>
+                <p className="text-foreground font-semibold">{rejectModalLoan.clienteNombre}</p>
+                <p className="text-text-muted">
+                  Monto: <span className="font-mono">{formatCurrency(rejectModalLoan.montoPrincipal)}</span> • Producto: {rejectModalLoan.productoNombre}
+                </p>
+              </div>
+
+              {/* Error Banner */}
+              {rejectError && (
+                <div className="p-3 rounded-[6px] bg-badge-danger-bg border border-badge-danger-text/20 text-badge-danger-text text-[12.5px] font-medium flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{rejectError}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleConfirmReject} noValidate className="space-y-4 text-[13px]">
+                <div>
+                  <label className="block text-text-secondary font-medium mb-1.5">
+                    Motivo de Rechazo * <span className="text-text-muted font-normal">(Obligatorio)</span>
+                  </label>
+                  <textarea
+                    required
+                    rows={4}
+                    disabled={isProcessingAction}
+                    placeholder="Explique detalladamente la razón por la cual se rechaza esta solicitud de crédito..."
+                    value={motivoRechazoInput}
+                    onChange={(e) => setMotivoRechazoInput(e.target.value)}
+                    className="w-full px-3 py-2 rounded-[4px] border border-border bg-white text-foreground text-[13px] placeholder:text-text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:border-primary disabled:opacity-50 transition-colors"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2.5 pt-3 border-t border-border">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={isProcessingAction}
+                    onClick={() => {
+                      setRejectModalLoan(null);
+                      setMotivoRechazoInput('');
+                      setRejectError(null);
+                    }}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    type="submit"
+                    variant="destructive"
+                    disabled={isProcessingAction}
+                    className="gap-1.5"
+                  >
+                    {isProcessingAction ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" /> Procesando...
+                      </>
+                    ) : (
+                      <>
+                        <XCircle className="w-4 h-4" /> Confirmar Rechazo
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </form>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal para Reasignar Promotor (Administrador) */}
+      <Dialog
+        open={Boolean(reassignModalLoan)}
+        onOpenChange={(open) => {
+          if (!open && !isProcessingAction) {
+            setReassignModalLoan(null);
+            setSelectedNewPromoterName('');
+            setReassignError(null);
+          }
+        }}
+      >
+        <DialogContent
+          className="max-w-md max-h-[90vh] overflow-y-auto"
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onInteractOutside={(e) => e.preventDefault()}
+        >
+          {reassignModalLoan && (
+            <div className="space-y-4">
+              <DialogHeader className="border-b border-border pb-2 pr-6 text-left">
+                <DialogTitle className="text-[16px] font-semibold text-foreground flex items-center gap-2">
+                  <UserCog className="w-5 h-5 text-primary" />
+                  Reasignar Promotor de Cobro
+                </DialogTitle>
+                <DialogDescription className="text-[12px] text-text-muted">
+                  Selecciona el nuevo promotor asignado a la cobranza del crédito.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="p-3 rounded-[6px] bg-surface-subtle border border-border text-[12.5px] space-y-1">
+                <p className="text-text-muted">
+                  Préstamo Folio: <span className="font-mono text-[11px] bg-white border border-border px-1.5 py-0.5 rounded-[4px] text-text-secondary font-medium">{reassignModalLoan.folio}</span>
+                </p>
+                <p className="text-foreground font-semibold">{reassignModalLoan.clienteNombre}</p>
+                <p className="text-text-muted">
+                  Promotor Actual: <strong className="text-foreground font-medium">{reassignModalLoan.promotorAsignado}</strong> (Día: {reassignModalLoan.diaCobro || 'Sin día'})
+                </p>
+              </div>
+
+              {/* Banner de Error */}
+              {reassignError && (
+                <div className="p-3 rounded-[6px] bg-badge-danger-bg border border-badge-danger-text/20 text-badge-danger-text text-[12.5px] font-medium flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{reassignError}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleConfirmReassign} noValidate className="space-y-4 text-[13px]">
+                <div>
+                  <label className="block text-text-secondary font-medium mb-1.5">
+                    Nuevo Promotor Asignado *
+                  </label>
+                  <Select
+                    value={selectedNewPromoterName || undefined}
+                    onValueChange={(val) => setSelectedNewPromoterName(val)}
+                    disabled={isProcessingAction}
+                  >
+                    <SelectTrigger className="w-full h-[36px] px-3 py-1.5 rounded-[4px] border border-border bg-white text-foreground font-normal text-[13px]">
+                      <SelectValue placeholder="Selecciona un colaborador..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {users
+                        .filter((u) => u.estatus === 'Activo')
+                        .map((u) => (
+                          <SelectItem key={u.id} value={u.name}>
+                            {u.name} ({u.role}) - Cobro: {u.diaCobroAsignado || 'Sin día'}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Vista previa del promotor seleccionado */}
+                {selectedNewPromoterName && (
+                  <div className="p-3 rounded-[6px] bg-surface-subtle border border-border text-[12.5px] space-y-1 text-text-secondary">
+                    {(() => {
+                      const sel = users.find((u) => u.name === selectedNewPromoterName);
+                      if (!sel) return null;
+                      return (
+                        <>
+                          <p className="font-semibold text-foreground">Detalles del Nuevo Promotor:</p>
+                          <p>👤 Nombre: {sel.name}</p>
+                          <p>📞 Teléfono: {sel.telefono || 'Sin teléfono'}</p>
+                          <p>🗓️ Día de Cobro Asignado: <strong>{sel.diaCobroAsignado || 'Sin asignar'}</strong></p>
+                          <p className="text-[11px] text-text-muted pt-1">
+                            Nota: Al reasignar, el día de cobro del crédito se actualizará a <strong>{sel.diaCobroAsignado || 'Sin asignar'}</strong>.
+                          </p>
+                        </>
+                      );
+                    })()}
+                  </div>
+                )}
+
+                <div className="flex justify-end gap-2.5 pt-3 border-t border-border">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={isProcessingAction}
+                    onClick={() => {
+                      setReassignModalLoan(null);
+                      setSelectedNewPromoterName('');
+                      setReassignError(null);
+                    }}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    type="submit"
+                    variant="stripe-actions"
+                    disabled={isProcessingAction}
+                    className="gap-1.5"
+                  >
+                    {isProcessingAction ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" /> Guardando...
+                      </>
+                    ) : (
+                      <>
+                        <UserCheck className="w-4 h-4" /> Confirmar Reasignación
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </form>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
