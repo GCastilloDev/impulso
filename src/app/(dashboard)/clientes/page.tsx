@@ -34,6 +34,13 @@ import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 export default function ClientsPage() {
   const { clients, setClients, loans, users, currentUser, loadDataFromDB } = useImpulsoStore();
@@ -559,7 +566,7 @@ export default function ClientsPage() {
 
     setIsReassigning(true);
     try {
-      if (!selectedNewPromotorId) {
+      if (!selectedNewPromotorId || selectedNewPromotorId === 'sin_asignar') {
         await updateClientAction(clientToReassign.id, {
           promotorAsignadoId: null,
           promotorAsignadoNombre: null,
@@ -650,21 +657,24 @@ export default function ClientsPage() {
               <label htmlFor="client-score-filter" className="text-base text-muted-foreground font-semibold whitespace-nowrap">
                 Score:
               </label>
-              <select
-                id="client-score-filter"
+              <Select
                 value={scoreFilter}
-                onChange={(e) => {
-                  setScoreFilter(e.target.value);
+                onValueChange={(val) => {
+                  setScoreFilter(val);
                   setCurrentPage(1);
                 }}
-                className="h-12 min-h-[44px] px-4 py-2 rounded-xl border border-input bg-white text-foreground text-base font-medium focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 transition-colors"
               >
-                <option value="todos">Todos</option>
-                <option value="Excelente">Excelente</option>
-                <option value="Bueno">Bueno</option>
-                <option value="Regular">Regular</option>
-                <option value="Alto Riesgo">Alto Riesgo</option>
-              </select>
+                <SelectTrigger id="client-score-filter" className="w-[140px]">
+                  <SelectValue placeholder="Score" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos</SelectItem>
+                  <SelectItem value="Excelente">Excelente</SelectItem>
+                  <SelectItem value="Bueno">Bueno</SelectItem>
+                  <SelectItem value="Regular">Regular</SelectItem>
+                  <SelectItem value="Alto Riesgo">Alto Riesgo</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             {/* Filter Promotor (Only for Admin) */}
@@ -674,23 +684,26 @@ export default function ClientsPage() {
                 <label htmlFor="client-promoter-filter" className="text-base text-muted-foreground font-semibold whitespace-nowrap">
                   Promotor:
                 </label>
-                <select
-                  id="client-promoter-filter"
+                <Select
                   value={promotorFilter}
-                  onChange={(e) => {
-                    setPromotorFilter(e.target.value);
+                  onValueChange={(val) => {
+                    setPromotorFilter(val);
                     setCurrentPage(1);
                   }}
-                  className="h-12 min-h-[44px] px-4 py-2 rounded-xl border border-input bg-white text-foreground text-base font-medium focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 transition-colors"
                 >
-                  <option value="todos">Todos los clientes</option>
-                  <option value="sin_asignar">Sin Asignar</option>
-                  {activePromotores.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger id="client-promoter-filter" className="w-[180px]">
+                    <SelectValue placeholder="Promotor" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos los clientes</SelectItem>
+                    <SelectItem value="sin_asignar">Sin Asignar</SelectItem>
+                    {activePromotores.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             )}
           </div>
@@ -829,18 +842,22 @@ export default function ClientsPage() {
 
             <div className="flex items-center gap-2">
               <span className="text-slate-500 font-medium">Filas por página:</span>
-              <select
-                value={itemsPerPage}
-                onChange={(e) => {
-                  setItemsPerPage(Number(e.target.value));
+              <Select
+                value={String(itemsPerPage)}
+                onValueChange={(val) => {
+                  setItemsPerPage(Number(val));
                   setCurrentPage(1);
                 }}
-                className="h-10 px-3 py-1 rounded-xl bg-white border border-input text-foreground font-bold text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               >
-                <option value={5}>5</option>
-                <option value={10}>10</option>
-                <option value={20}>20</option>
-              </select>
+                <SelectTrigger className="w-[70px] font-bold">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="5">5</SelectItem>
+                  <SelectItem value="10">10</SelectItem>
+                  <SelectItem value="20">20</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
@@ -911,18 +928,22 @@ export default function ClientsPage() {
               <label className="block text-sm font-semibold text-foreground mb-1.5">
                 Selecciona Promotor Responsable
               </label>
-              <select
-                value={selectedNewPromotorId}
-                onChange={(e) => setSelectedNewPromotorId(e.target.value)}
-                className="w-full h-12 min-h-[44px] px-4 py-2 rounded-xl border border-input bg-white text-foreground text-base font-medium focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 transition-colors"
+              <Select
+                value={selectedNewPromotorId || 'sin_asignar'}
+                onValueChange={(val) => setSelectedNewPromotorId(val === 'sin_asignar' ? '' : val)}
               >
-                <option value="">Sin Asignar</option>
-                {activePromotores.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    👤 {p.name} ({p.role})
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Selecciona promotor" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="sin_asignar">Sin Asignar</SelectItem>
+                  {activePromotores.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      👤 {p.name} ({p.role})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="pt-3 flex justify-end gap-3 border-t border-border">
@@ -1198,17 +1219,21 @@ export default function ClientsPage() {
 
                   <div>
                     <label className="block text-foreground font-semibold mb-1.5 text-base">Score Crediticio Inicial</label>
-                    <select
+                    <Select
                       value={scoreCrediticio}
                       disabled={isSubmitting}
-                      onChange={(e) => setScoreCrediticio(e.target.value as ScoreCrediticio)}
-                      className="w-full h-12 min-h-[44px] px-4 py-2 rounded-xl border border-input bg-white text-foreground text-base focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 transition-colors disabled:opacity-50"
+                      onValueChange={(val) => setScoreCrediticio(val as ScoreCrediticio)}
                     >
-                      <option value="Excelente">Excelente</option>
-                      <option value="Bueno">Bueno</option>
-                      <option value="Regular">Regular</option>
-                      <option value="Alto Riesgo">Alto Riesgo</option>
-                    </select>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Score" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Excelente">Excelente</SelectItem>
+                        <SelectItem value="Bueno">Bueno</SelectItem>
+                        <SelectItem value="Regular">Regular</SelectItem>
+                        <SelectItem value="Alto Riesgo">Alto Riesgo</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
               </div>
@@ -1341,18 +1366,21 @@ export default function ClientsPage() {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-foreground font-semibold mb-1.5 text-base">Parentesco *</label>
-                      <select
-                        required
+                      <Select
                         disabled={isSubmitting}
                         value={ref1Parentesco}
-                        onChange={(e) => setRef1Parentesco(e.target.value)}
-                        className="w-full h-12 min-h-[44px] px-4 py-2 rounded-xl border border-input bg-white text-foreground text-base focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 transition-colors disabled:opacity-50"
+                        onValueChange={(val) => setRef1Parentesco(val)}
                       >
-                        <option value="Familiar">Familiar</option>
-                        <option value="Amigo">Amigo</option>
-                        <option value="Vecino">Vecino</option>
-                        <option value="Compañero de Trabajo / Socio">Compañero / Socio</option>
-                      </select>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Parentesco" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Familiar">Familiar</SelectItem>
+                          <SelectItem value="Amigo">Amigo</SelectItem>
+                          <SelectItem value="Vecino">Vecino</SelectItem>
+                          <SelectItem value="Compañero de Trabajo / Socio">Compañero / Socio</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
                     <div>
                       <label className="block text-foreground font-semibold mb-1.5 text-base">Teléfono (10 dígitos) *</label>
@@ -1498,18 +1526,21 @@ export default function ClientsPage() {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-foreground font-semibold mb-1.5 text-base">Parentesco *</label>
-                      <select
-                        required
+                      <Select
                         disabled={isSubmitting}
                         value={ref2Parentesco}
-                        onChange={(e) => setRef2Parentesco(e.target.value)}
-                        className="w-full h-12 min-h-[44px] px-4 py-2 rounded-xl border border-input bg-white text-foreground text-base focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 transition-colors disabled:opacity-50"
+                        onValueChange={(val) => setRef2Parentesco(val)}
                       >
-                        <option value="Familiar">Familiar</option>
-                        <option value="Amigo">Amigo</option>
-                        <option value="Vecino">Vecino</option>
-                        <option value="Compañero de Trabajo / Socio">Compañero / Socio</option>
-                      </select>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Parentesco" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Familiar">Familiar</SelectItem>
+                          <SelectItem value="Amigo">Amigo</SelectItem>
+                          <SelectItem value="Vecino">Vecino</SelectItem>
+                          <SelectItem value="Compañero de Trabajo / Socio">Compañero / Socio</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
                     <div>
                       <label className="block text-foreground font-semibold mb-1.5 text-base">Teléfono (10 dígitos) *</label>

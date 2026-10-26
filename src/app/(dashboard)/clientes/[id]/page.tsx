@@ -67,6 +67,13 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 function CopyButton({ text, label = 'Copiar' }: { text: string; label?: string }) {
   const [copied, setCopied] = useState(false);
@@ -967,18 +974,18 @@ export default function ClientDetailPage() {
                   <label htmlFor="select-loan-schedule" className="text-[12px] text-text-muted font-medium">
                     Crédito:
                   </label>
-                  <select
-                    id="select-loan-schedule"
-                    value={effectiveLoanId}
-                    onChange={(e) => setSelectedLoanId(e.target.value)}
-                    className="text-[12px] h-[30px] px-2 rounded-[4px] border border-border bg-white text-foreground focus:outline-none focus:ring-1 focus:ring-ring font-mono"
-                  >
-                    {clientLoans.map((l) => (
-                      <option key={l.id} value={l.id}>
-                        {l.folio} - {l.productoNombre} ({l.estatus})
-                      </option>
-                    ))}
-                  </select>
+                  <Select value={effectiveLoanId} onValueChange={(val) => setSelectedLoanId(val)}>
+                    <SelectTrigger id="select-loan-schedule" className="w-auto min-w-[200px] font-mono text-[12px]">
+                      <SelectValue placeholder="Seleccionar crédito" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {clientLoans.map((l) => (
+                        <SelectItem key={l.id} value={l.id} className="font-mono text-[12px]">
+                          {l.folio} - {l.productoNombre} ({l.estatus})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               )}
             </CardHeader>
@@ -1138,19 +1145,22 @@ export default function ClientDetailPage() {
               <label htmlFor="promotor-select" className="block text-[13px] font-medium text-foreground mb-1.5">
                 Selecciona Promotor Responsable
               </label>
-              <select
-                id="promotor-select"
-                value={selectedPromotorId}
-                onChange={(e) => setSelectedPromotorId(e.target.value)}
-                className="w-full h-10 px-3 rounded-[4px] border border-border bg-white text-foreground text-[13px] focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary"
+              <Select
+                value={selectedPromotorId || 'sin_asignar'}
+                onValueChange={(val) => setSelectedPromotorId(val === 'sin_asignar' ? '' : val)}
               >
-                <option value="">Sin Asignar (Solo visible para Administración)</option>
-                {activePromotores.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name} ({p.role})
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger id="promotor-select" className="w-full">
+                  <SelectValue placeholder="Selecciona un promotor" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="sin_asignar">Sin Asignar (Solo visible para Administración)</SelectItem>
+                  {activePromotores.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name} ({p.role})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
@@ -1306,17 +1316,21 @@ export default function ClientDetailPage() {
                   <label className="block text-foreground font-medium mb-1 text-[13px]">
                     Score Crediticio *
                   </label>
-                  <select
+                  <Select
                     value={scoreCrediticio}
                     disabled={isSubmitting}
-                    onChange={(e) => setScoreCrediticio(e.target.value as ScoreCrediticio)}
-                    className="w-full h-9 px-3 rounded-[4px] border border-border bg-white text-foreground text-[13px] focus:outline-none focus:ring-1 focus:ring-ring"
+                    onValueChange={(val) => setScoreCrediticio(val as ScoreCrediticio)}
                   >
-                    <option value="Excelente">Excelente</option>
-                    <option value="Bueno">Bueno</option>
-                    <option value="Regular">Regular</option>
-                    <option value="Alto Riesgo">Alto Riesgo</option>
-                  </select>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Score" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Excelente">Excelente</SelectItem>
+                      <SelectItem value="Bueno">Bueno</SelectItem>
+                      <SelectItem value="Regular">Regular</SelectItem>
+                      <SelectItem value="Alto Riesgo">Alto Riesgo</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 
@@ -1325,19 +1339,23 @@ export default function ClientDetailPage() {
                   <label className="block text-foreground font-medium mb-1 text-[13px]">
                     Promotor Asignado
                   </label>
-                  <select
-                    value={promotorAsignadoId}
+                  <Select
+                    value={promotorAsignadoId || 'sin_asignar'}
                     disabled={isSubmitting}
-                    onChange={(e) => setPromotorAsignadoId(e.target.value)}
-                    className="w-full h-9 px-3 rounded-[4px] border border-border bg-white text-foreground text-[13px] focus:outline-none focus:ring-1 focus:ring-ring"
+                    onValueChange={(val) => setPromotorAsignadoId(val === 'sin_asignar' ? '' : val)}
                   >
-                    <option value="">Sin Asignar</option>
-                    {activePromotores.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name} ({p.role})
-                      </option>
-                    ))}
-                  </select>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Promotor Asignado" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="sin_asignar">Sin Asignar</SelectItem>
+                      {activePromotores.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.name} ({p.role})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               )}
             </div>
