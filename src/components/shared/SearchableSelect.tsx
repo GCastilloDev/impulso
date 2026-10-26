@@ -165,7 +165,7 @@ export function SearchableSelect({
 
             {displayedOptions.length === 0 && (
               <div className="p-4 text-center text-slate-500 text-xs">
-                No se encontraron resultados para "{searchTerm}"
+                No se encontraron resultados para &ldquo;{searchTerm}&rdquo;
               </div>
             )}
           </div>
