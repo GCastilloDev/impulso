@@ -37,6 +37,33 @@ import {
 } from '@/lib/utils';
 import { getUsersAction, getUserByIdAction, createUserAction, updateUserAction, toggleUserStatusAction } from '@/app/actions/userActions';
 
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Table,
+  TableHeader,
+  TableRow,
+  TableHead,
+  TableBody,
+  TableCell,
+} from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+
 // Lista de avatares predeterminados profesionales opcionales
 const PRESET_AVATARS = [
   'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200',
@@ -142,17 +169,6 @@ export default function UsersManagementPage() {
     }, 100);
     return () => clearTimeout(timer);
   }, [searchTerm, roleFilter, fetchUsersServerSide]);
-
-  // Cierre de Modal con la tecla ESCAPE
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isModalOpen && !isSubmitting) {
-        setIsModalOpen(false);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isModalOpen, isSubmitting]);
 
   const resetForm = () => {
     setName('');
@@ -728,18 +744,18 @@ export default function UsersManagementPage() {
   if (!isAdmin) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center p-4">
-        <div className="glass-panel max-w-md w-full p-8 rounded-2xl border border-slate-800 text-center space-y-4 shadow-2xl">
-          <div className="w-16 h-16 rounded-2xl bg-rose-500/10 text-rose-400 border border-rose-500/20 flex items-center justify-center mx-auto shadow-lg">
-            <Lock className="w-8 h-8" />
+        <Card className="max-w-md w-full p-8 text-center space-y-4 border-border shadow-2xs">
+          <div className="w-14 h-14 rounded-[8px] bg-badge-danger-bg text-badge-danger-text border border-badge-danger-text/20 flex items-center justify-center mx-auto">
+            <Lock className="w-7 h-7" />
           </div>
-          <h2 className="text-xl font-extrabold text-white">Acceso Restringido</h2>
-          <p className="text-xs text-slate-400 leading-relaxed">
-            La sección de **Gestión de Personal & Colaboradores** es de uso exclusivo para perfiles con rol de **Administrador**.
+          <h2 className="text-[18px] font-semibold text-foreground">Acceso Restringido</h2>
+          <p className="text-[13px] text-text-muted leading-relaxed">
+            La sección de <strong className="text-foreground">Gestión de Personal & Colaboradores</strong> es de uso exclusivo para perfiles con rol de <strong className="text-foreground">Administrador</strong>.
           </p>
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-slate-800 text-slate-400 border border-slate-700">
-            Tu rol actual: <strong className="text-indigo-400">{currentUser?.role}</strong>
-          </span>
-        </div>
+          <Badge variant="secondary" className="px-3 py-1 text-[12px] font-medium mx-auto">
+            Tu rol actual: <strong className="text-foreground ml-1">{currentUser?.role}</strong>
+          </Badge>
+        </Card>
       </div>
     );
   }
@@ -749,858 +765,892 @@ export default function UsersManagementPage() {
       {/* Header Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-extrabold text-white flex items-center gap-2 tracking-tight">
-            <UserCog className="w-7 h-7 text-emerald-400" />
+          <h1 className="text-[22px] sm:text-[24px] font-semibold text-foreground flex items-center gap-2.5 tracking-tight">
+            <UserCog className="w-6 h-6 text-primary" />
             Gestión de Personal & Colaboradores
           </h1>
-          <p className="text-sm text-slate-400">
+          <p className="text-[13px] text-text-muted mt-1">
             Directorio de colaboradores y administración de expedientes.
           </p>
         </div>
 
-        <button
+        <Button
           onClick={openNewUserModal}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-extrabold text-sm shadow-lg shadow-emerald-500/20 transition-all"
+          className="h-[34px] px-3.5 text-[13px] font-medium"
         >
-          <UserPlus className="w-4 h-4 stroke-[3]" />
+          <UserPlus className="w-4 h-4 mr-1 stroke-[2.5]" />
           Nuevo Colaborador
-        </button>
+        </Button>
       </div>
 
       {/* Filters Toolbar */}
-      <div className="glass-panel p-4 rounded-2xl border border-slate-800 flex flex-col md:flex-row gap-3 justify-between items-center">
-        <div className="relative w-full md:w-80">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            placeholder="Buscar por Nombre, Email, CURP o INE..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 rounded-xl bg-slate-900/90 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500"
-          />
-        </div>
+      <Card className="border border-border rounded-[6px] shadow-2xs">
+        <CardContent className="p-3.5 flex flex-col md:flex-row gap-3 justify-between items-stretch md:items-center">
+          <div className="relative w-full md:w-80">
+            <Search className="w-4 h-4 text-text-muted absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <Input
+              type="text"
+              placeholder="Buscar por Nombre, Email, CURP o INE..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-9 h-[34px] text-[13px] bg-white border-border rounded-[4px]"
+            />
+          </div>
 
-        <div className="flex items-center gap-2 w-full md:w-auto">
-          <Filter className="w-4 h-4 text-slate-400" />
-          <span className="text-xs text-slate-400 font-medium">Filtrar por Rol:</span>
-          <select
-            value={roleFilter}
-            onChange={(e) => setRoleFilter(e.target.value)}
-            className="px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500 font-semibold"
-          >
-            <option value="todos">Todos los roles</option>
-            <option value="Administrador">Administrador</option>
-            <option value="Promotor de Campo">Promotor de Campo</option>
-          </select>
-        </div>
-      </div>
+          <div className="flex items-center gap-2.5 w-full md:w-auto">
+            <Filter className="w-4 h-4 text-text-muted shrink-0" />
+            <label htmlFor="user-role-filter" className="text-[12px] text-text-muted font-medium whitespace-nowrap">
+              Filtrar por Rol:
+            </label>
+            <Select value={roleFilter} onValueChange={(val) => setRoleFilter(val)}>
+              <SelectTrigger id="user-role-filter" className="h-[34px] w-full md:w-[200px] text-[13px] bg-white border-border">
+                <SelectValue placeholder="Todos los roles" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos los roles</SelectItem>
+                <SelectItem value="Administrador">Administrador</SelectItem>
+                <SelectItem value="Promotor de Campo">Promotor de Campo</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Users Table */}
-      <div className="glass-panel rounded-2xl border border-slate-800 overflow-hidden">
+      <Card className="border border-border rounded-[6px] shadow-2xs overflow-hidden bg-card">
         {isLoading ? (
-          <div className="p-12 text-center text-slate-400 text-xs flex items-center justify-center gap-2">
-            <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
+          <div className="p-12 text-center text-text-muted text-[13px] flex items-center justify-center gap-2">
+            <Loader2 className="w-4 h-4 animate-spin text-primary" />
             Cargando lista de colaboradores...
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-900/90 text-slate-400 font-semibold border-b border-slate-800 uppercase tracking-wider">
-                <tr>
-                  <th className="p-4">Colaborador</th>
-                  <th className="p-4">Contacto / Identificación</th>
-                  <th className="p-4">Rol Asignado</th>
-                  <th className="p-4">Día de Cobro</th>
-                  <th className="p-4">Estatus</th>
-                  <th className="p-4">Fecha de Alta</th>
-                  <th className="p-4 text-right">Acciones</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800/80">
-                {dbUsers.map((user) => (
-                  <tr key={user.id} className="hover:bg-slate-800/40 transition-colors">
-                    <td className="p-4">
-                      <div className="flex items-center gap-3">
-                        {user.avatar ? (
-                          <img
-                            src={user.avatar}
-                            alt={user.name}
-                            className="w-10 h-10 rounded-full object-cover border border-slate-700 shrink-0"
-                          />
-                        ) : (
-                          <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-emerald-500 to-teal-400 text-slate-950 font-black flex items-center justify-center text-xs shrink-0 shadow-md">
-                            {getInitials(user.name)}
-                          </div>
-                        )}
-                        <div>
-                          <p className="font-bold text-white text-sm">{user.name}</p>
-                          <p className="text-[11px] text-slate-400 font-mono">{user.email}</p>
-                          {user.role === 'Promotor de Campo' && user.direccionEstructurada && (
-                            <p className="text-[10px] text-slate-500 flex items-center gap-1 mt-0.5">
-                              <MapPin className="w-3 h-3 text-emerald-400" />
-                              {user.direccionEstructurada.colonia}, {user.direccionEstructurada.ciudad}
-                            </p>
-                          )}
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="min-w-[220px] text-[11px] font-medium text-text-muted uppercase tracking-wider">Colaborador</TableHead>
+                <TableHead className="min-w-[190px] text-[11px] font-medium text-text-muted uppercase tracking-wider">Contacto / Identificación</TableHead>
+                <TableHead className="min-w-[150px] text-[11px] font-medium text-text-muted uppercase tracking-wider">Rol Asignado</TableHead>
+                <TableHead className="min-w-[130px] text-[11px] font-medium text-text-muted uppercase tracking-wider">Día de Cobro</TableHead>
+                <TableHead className="min-w-[120px] text-[11px] font-medium text-text-muted uppercase tracking-wider">Estatus</TableHead>
+                <TableHead className="min-w-[120px] text-[11px] font-medium text-text-muted uppercase tracking-wider">Fecha de Alta</TableHead>
+                <TableHead className="text-right min-w-[100px] text-[11px] font-medium text-text-muted uppercase tracking-wider">Acciones</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {dbUsers.map((user) => (
+                <TableRow key={user.id} className="h-[38px]">
+                  <TableCell>
+                    <div className="flex items-center gap-2.5 py-1">
+                      {user.avatar ? (
+                        <img
+                          src={user.avatar}
+                          alt={user.name}
+                          className="w-8 h-8 rounded-full object-cover border border-border shrink-0"
+                        />
+                      ) : (
+                        <div className="w-8 h-8 rounded-full bg-surface-subtle text-foreground font-semibold flex items-center justify-center text-[11px] shrink-0 border border-border">
+                          {getInitials(user.name)}
                         </div>
+                      )}
+                      <div className="space-y-0.5">
+                        <p className="font-semibold text-foreground text-[13px] leading-tight">{user.name}</p>
+                        <p className="text-[12px] text-text-muted font-mono">{user.email}</p>
+                        {user.role === 'Promotor de Campo' && user.direccionEstructurada && (
+                          <p className="text-[11px] text-text-muted flex items-center gap-1">
+                            <MapPin className="w-3 h-3 text-text-muted" />
+                            {user.direccionEstructurada.colonia}, {user.direccionEstructurada.ciudad}
+                          </p>
+                        )}
                       </div>
-                    </td>
+                    </div>
+                  </TableCell>
 
-                    <td className="p-4 space-y-1">
-                      <div className="flex items-center gap-1.5 text-slate-300 font-medium">
-                        <Phone className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  <TableCell>
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-1.5 text-text-secondary text-[12px] font-medium">
+                        <Phone className="w-3.5 h-3.5 text-text-muted shrink-0" />
                         {user.telefono || 'Sin teléfono'}
                       </div>
 
-                      <div className="flex flex-wrap gap-1.5 pt-0.5">
+                      <div className="flex flex-wrap gap-1">
                         {user.curp && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-900 border border-slate-700 text-slate-300 font-mono">
+                          <span className="text-[10.5px] px-1.5 py-0.5 rounded-[4px] bg-surface-subtle border border-border text-text-secondary font-mono">
                             CURP: {user.curp}
                           </span>
                         )}
                         {user.folioIne && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 font-mono">
+                          <span className="text-[10.5px] px-1.5 py-0.5 rounded-[4px] bg-badge-info-bg border border-badge-info-text/20 text-badge-info-text font-mono">
                             INE: {user.folioIne}
                           </span>
                         )}
                       </div>
-                    </td>
+                    </div>
+                  </TableCell>
 
-                    <td className="p-4">
-                      <span
-                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${
-                          user.role === 'Administrador'
-                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                            : 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20'
-                        }`}
-                      >
-                        {user.role === 'Administrador' ? (
-                          <ShieldCheck className="w-3.5 h-3.5" />
-                        ) : (
-                          <UserCheck className="w-3.5 h-3.5" />
-                        )}
-                        {user.role}
-                      </span>
-                    </td>
+                  <TableCell>
+                    <Badge
+                      variant={user.role === 'Administrador' ? 'info' : 'secondary'}
+                      className="gap-1 text-[11px] font-medium"
+                    >
+                      {user.role === 'Administrador' ? (
+                        <ShieldCheck className="w-3 h-3" />
+                      ) : (
+                        <UserCheck className="w-3 h-3" />
+                      )}
+                      {user.role}
+                    </Badge>
+                  </TableCell>
 
-                    <td className="p-4">
-                      <span
-                        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl font-black text-xs border shadow-sm ${
-                          user.diaCobroAsignado
-                            ? 'bg-gradient-to-r from-emerald-500/20 to-teal-500/10 text-emerald-400 border-emerald-500/30 shadow-emerald-500/5'
-                            : 'bg-slate-900 text-slate-500 border-slate-800'
-                        }`}
-                      >
-                        <Calendar className="w-3.5 h-3.5 text-emerald-400" />
-                        {user.diaCobroAsignado || 'Sin asignar'}
-                      </span>
-                    </td>
+                  <TableCell>
+                    {user.diaCobroAsignado ? (
+                      <Badge variant="outline" className="gap-1 text-[11px] font-medium bg-surface-subtle">
+                        <Calendar className="w-3 h-3 text-text-muted" />
+                        {user.diaCobroAsignado}
+                      </Badge>
+                    ) : (
+                      <span className="text-[12px] text-text-muted font-normal">Sin asignar</span>
+                    )}
+                  </TableCell>
 
-                    <td className="p-4">
-                      <button
-                        onClick={() => handleToggleStatus(user.id)}
-                        disabled={togglingUserId === user.id}
-                        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
-                          user.estatus === 'Activo'
-                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20'
-                            : 'bg-rose-500/10 text-rose-400 border-rose-500/30 hover:bg-rose-500/20'
-                        }`}
-                        title="Haz clic para cambiar estatus"
-                      >
-                        {togglingUserId === user.id ? (
-                          <>
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" /> Actualizando...
-                          </>
-                        ) : (
-                          <>
-                            {user.estatus === 'Activo' ? (
-                              <CheckCircle2 className="w-3.5 h-3.5" />
-                            ) : (
-                              <XCircle className="w-3.5 h-3.5" />
-                            )}
-                            {user.estatus}
-                          </>
-                        )}
-                      </button>
-                    </td>
+                  <TableCell>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleToggleStatus(user.id)}
+                      disabled={togglingUserId === user.id}
+                      className={`h-[26px] px-2 text-[11.5px] font-medium rounded-[4px] border ${
+                        user.estatus === 'Activo'
+                          ? 'bg-badge-success-bg text-badge-success-text border-badge-success-text/20 hover:bg-badge-success-bg/80'
+                          : 'bg-badge-danger-bg text-badge-danger-text border-badge-danger-text/20 hover:bg-badge-danger-bg/80'
+                      }`}
+                      title="Haz clic para cambiar estatus"
+                    >
+                      {togglingUserId === user.id ? (
+                        <>
+                          <Loader2 className="w-3 h-3 animate-spin mr-1" /> Actualizando...
+                        </>
+                      ) : (
+                        <>
+                          {user.estatus === 'Activo' ? (
+                            <CheckCircle2 className="w-3 h-3 mr-1" />
+                          ) : (
+                            <XCircle className="w-3 h-3 mr-1" />
+                          )}
+                          {user.estatus}
+                        </>
+                      )}
+                    </Button>
+                  </TableCell>
 
-                    <td className="p-4 text-slate-400 font-mono">
-                      {formatDate(user.fechaAlta)}
-                    </td>
+                  <TableCell className="text-text-muted font-mono text-[12px]">
+                    {formatDate(user.fechaAlta)}
+                  </TableCell>
 
-                    <td className="p-4 text-right">
-                      <button
-                        onClick={() => openEditUserModal(user)}
-                        disabled={loadingEditId === user.id}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700 text-xs font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {loadingEditId === user.id ? (
-                          <>
-                            <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400" /> Cargando...
-                          </>
-                        ) : (
-                          <>
-                            <Edit3 className="w-3.5 h-3.5 text-emerald-400" />
-                            Editar
-                          </>
-                        )}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                  <TableCell className="text-right">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => openEditUserModal(user)}
+                      disabled={loadingEditId === user.id}
+                      className="h-[28px] px-2.5 text-[12px] gap-1.5"
+                    >
+                      {loadingEditId === user.id ? (
+                        <>
+                          <Loader2 className="w-3 h-3 animate-spin text-primary" /> Cargando...
+                        </>
+                      ) : (
+                        <>
+                          <Edit3 className="w-3 h-3 text-text-muted" />
+                          Editar
+                        </>
+                      )}
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
 
-                {dbUsers.length === 0 && (
-                  <tr>
-                    <td colSpan={6} className="p-8 text-center text-slate-500">
-                      No se encontraron colaboradores con los filtros aplicados.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+              {dbUsers.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={7} className="p-8 text-center text-text-muted text-[13px]">
+                    No se encontraron colaboradores con los filtros aplicados.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
         )}
-      </div>
+      </Card>
 
       {/* Modal Alta / Edición de Colaborador */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-4">
-          <div ref={modalScrollRef} className="glass-panel w-full max-w-2xl p-6 rounded-2xl border border-slate-800 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center pb-2 border-b border-slate-800">
-              <div>
-                <h2 className="text-xl font-extrabold text-white flex items-center gap-2">
-                  {editingUserId ? (
-                    <>
-                      <Edit3 className="w-6 h-6 text-emerald-400" />
-                      Editar Colaborador
-                    </>
-                  ) : (
-                    <>
-                      <UserPlus className="w-6 h-6 text-emerald-400" />
-                      Alta de Nuevo Colaborador
-                    </>
-                  )}
-                </h2>
-              </div>
+      <Dialog
+        open={isModalOpen}
+        onOpenChange={(open) => {
+          if (!open && !isSubmitting) {
+            setIsModalOpen(false);
+          }
+        }}
+      >
+        <DialogContent
+          ref={modalScrollRef}
+          className="max-w-2xl max-h-[90vh] overflow-y-auto p-6"
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onInteractOutside={(e) => e.preventDefault()}
+        >
+          <DialogHeader className="border-b border-border pb-3 pr-6 text-left">
+            <DialogTitle className="text-[17px] font-semibold text-foreground flex items-center gap-2">
+              {editingUserId ? (
+                <>
+                  <Edit3 className="w-5 h-5 text-primary" />
+                  Editar Colaborador
+                </>
+              ) : (
+                <>
+                  <UserPlus className="w-5 h-5 text-primary" />
+                  Alta de Nuevo Colaborador
+                </>
+              )}
+            </DialogTitle>
+            <DialogDescription className="text-[12.5px] text-text-muted">
+              {editingUserId
+                ? 'Actualiza los datos del expediente del colaborador y credenciales de acceso.'
+                : 'Ingresa los datos para registrar un nuevo colaborador en el sistema.'}
+            </DialogDescription>
+          </DialogHeader>
 
-              <button
-                type="button"
-                disabled={isSubmitting}
-                onClick={() => setIsModalOpen(false)}
-                className="text-slate-400 hover:text-white p-1 text-base disabled:opacity-30"
-                title="Cerrar modal (Esc)"
-              >
-                ✕
-              </button>
+          {errorMsg && (
+            <div className="p-3 rounded-[6px] bg-badge-danger-bg border border-badge-danger-text/20 text-badge-danger-text text-[12.5px] font-medium flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{errorMsg}</span>
             </div>
+          )}
 
-            {errorMsg && (
-              <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/40 text-rose-300 text-xs font-semibold flex items-center gap-2.5 shadow-lg shadow-rose-500/10">
-                <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
-                <span>{errorMsg}</span>
-              </div>
-            )}
-
-            <form onSubmit={handleSubmitUser} noValidate className="space-y-4 text-xs">
-              {/* Selector de Rol y Día de Cobro Asignado */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 rounded-xl bg-slate-900 border border-slate-800">
+          <form onSubmit={handleSubmitUser} noValidate className="space-y-4 text-[13px]">
+            {/* Selector de Rol y Día de Cobro Asignado */}
+            <Card className="p-3.5 bg-surface-subtle border-border rounded-[6px]">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-emerald-400 uppercase tracking-wider mb-1">
+                  <label className="block text-[11.5px] font-semibold text-text-secondary uppercase tracking-wider mb-1.5">
                     Rol de Colaborador *
                   </label>
-                  <select
+                  <Select
                     value={role}
                     disabled={isSubmitting}
-                    onChange={(e) => setRole(e.target.value as UserRole)}
-                    className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white font-extrabold text-sm focus:outline-none focus:border-emerald-500"
+                    onValueChange={(val) => setRole(val as UserRole)}
                   >
-                    <option value="Administrador">Administrador</option>
-                    <option value="Promotor de Campo">Promotor de Campo</option>
-                  </select>
+                    <SelectTrigger className="h-[36px] bg-white border-border text-[13px]">
+                      <SelectValue placeholder="Seleccionar rol" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Administrador">Administrador</SelectItem>
+                      <SelectItem value="Promotor de Campo">Promotor de Campo</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-emerald-400 uppercase tracking-wider mb-1">
+                  <label className="block text-[11.5px] font-semibold text-text-secondary uppercase tracking-wider mb-1.5">
                     Día de Cobro Asignado *
                   </label>
-                  <select
-                    value={diaCobroAsignado}
+                  <Select
+                    value={diaCobroAsignado || 'sin_asignar'}
                     disabled={isSubmitting}
-                    onChange={(e) => setDiaCobroAsignado(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white font-extrabold text-sm focus:outline-none focus:border-emerald-500"
+                    onValueChange={(val) => setDiaCobroAsignado(val === 'sin_asignar' ? '' : val)}
                   >
-                    <option value="">Seleccionar día...</option>
-                    {DIAS_SEMANA_CATALOGO.map((dia) => (
-                      <option key={dia} value={dia}>
-                        {dia}
-                      </option>
-                    ))}
-                  </select>
+                    <SelectTrigger className="h-[36px] bg-white border-border text-[13px]">
+                      <SelectValue placeholder="Seleccionar día..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="sin_asignar">Seleccionar día...</SelectItem>
+                      {DIAS_SEMANA_CATALOGO.map((dia) => (
+                        <SelectItem key={dia} value={dia}>
+                          {dia}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
+            </Card>
 
-              {/* Sección 1: Datos de Cuenta */}
-              <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 space-y-3">
-                <h3 className="text-xs font-extrabold text-white uppercase tracking-wider flex items-center gap-1.5">
-                  <UserIcon className="w-4 h-4 text-white stroke-[2.5]" />
-                  1. Datos de Cuenta
-                </h3>
+            {/* Sección 1: Datos de Cuenta */}
+            <Card className="p-4 bg-card border-border rounded-[6px] space-y-3">
+              <h3 className="text-[12px] font-semibold text-foreground uppercase tracking-wider flex items-center gap-1.5">
+                <UserIcon className="w-4 h-4 text-primary" />
+                1. Datos de Cuenta
+              </h3>
 
+              <div>
+                <label className="block text-text-secondary text-[12px] font-medium mb-1">Nombre Completo *</label>
+                <Input
+                  type="text"
+                  required
+                  disabled={isSubmitting}
+                  placeholder="Ej: Gabriel Morales Trejo"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="h-[36px] bg-white border-border text-[13px]"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Nombre Completo *</label>
-                  <input
-                    type="text"
+                  <label className="block text-text-secondary text-[12px] font-medium mb-1">Correo Electrónico *</label>
+                  <Input
+                    type="email"
                     required
                     disabled={isSubmitting}
-                    placeholder="Ej: Gabriel Morales Trejo"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm focus:outline-none focus:border-emerald-500 disabled:opacity-50"
+                    placeholder="gabriel.morales@financieraimpulso.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="h-[36px] bg-white border-border text-[13px]"
                   />
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-slate-300 font-semibold mb-1">Correo Electrónico *</label>
-                    <input
-                      type="email"
-                      required
-                      disabled={isSubmitting}
-                      placeholder="gabriel.morales@financieraimpulso.com"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500 disabled:opacity-50"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-slate-300 font-semibold mb-1">
-                      Teléfono Móvil (10 dígitos) *
-                    </label>
-                    <input
-                      type="tel"
-                      required
-                      maxLength={10}
-                      disabled={isSubmitting}
-                      placeholder="5599001234"
-                      value={telefono}
-                      onChange={(e) => setTelefono(onlyDigits(e.target.value, 10))}
-                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs font-mono focus:outline-none focus:border-emerald-500 disabled:opacity-50"
-                    />
-                  </div>
-                </div>
-
-                {/* Campo Contraseña con Regla Visual y Botón de Ojo */}
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">
-                    {editingUserId ? 'Nueva Contraseña (Opcional)' : 'Contraseña Inicial *'}
+                  <label className="block text-text-secondary text-[12px] font-medium mb-1">
+                    Teléfono Móvil (10 dígitos) *
                   </label>
-                  <div className="relative">
-                    <input
-                      type={showPassword ? 'text' : 'password'}
-                      required={!editingUserId}
-                      disabled={isSubmitting}
-                      placeholder={editingUserId ? 'Dejar en blanco para mantener la actual' : '••••••••'}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      className="w-full pl-3 pr-10 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500 font-mono disabled:opacity-50"
-                    />
-                    <button
-                      type="button"
-                      disabled={isSubmitting}
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
-                      title={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-                    >
-                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                  <p className="text-[11px] text-slate-400 mt-1 flex items-center gap-1">
-                    🔒 <strong className="text-slate-300">Regla:</strong> Mínimo 8 caracteres, al menos 1 mayúscula (A-Z) y 1 número (0-9).
-                  </p>
+                  <Input
+                    type="tel"
+                    required
+                    maxLength={10}
+                    disabled={isSubmitting}
+                    placeholder="5599001234"
+                    value={telefono}
+                    onChange={(e) => setTelefono(onlyDigits(e.target.value, 10))}
+                    className="h-[36px] bg-white border-border text-[13px] font-mono"
+                  />
                 </div>
               </div>
 
-              {/* Sección Exclusiva para PROMOTOR DE CAMPO */}
-              {role !== 'Administrador' && (
-                <>
-                  {/* Identificación y Nacimiento */}
-                  <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 space-y-3">
-                    <h3 className="text-xs font-extrabold text-white uppercase tracking-wider flex items-center gap-1.5">
-                      <CreditCard className="w-4 h-4 text-white stroke-[2.5]" />
-                      2. Identificación
-                    </h3>
+              {/* Campo Contraseña */}
+              <div>
+                <label className="block text-text-secondary text-[12px] font-medium mb-1">
+                  {editingUserId ? 'Nueva Contraseña (Opcional)' : 'Contraseña Inicial *'}
+                </label>
+                <div className="relative">
+                  <Input
+                    type={showPassword ? 'text' : 'password'}
+                    required={!editingUserId}
+                    disabled={isSubmitting}
+                    placeholder={editingUserId ? 'Dejar en blanco para mantener la actual' : '••••••••'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="h-[36px] bg-white border-border text-[13px] font-mono pr-10"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    disabled={isSubmitting}
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 text-text-muted hover:text-foreground"
+                    title={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </Button>
+                </div>
+                <p className="text-[11px] text-text-muted mt-1.5 flex items-center gap-1">
+                  🔒 <strong className="text-text-secondary">Regla:</strong> Mínimo 8 caracteres, al menos 1 mayúscula (A-Z) y 1 número (0-9).
+                </p>
+              </div>
+            </Card>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {/* Sección Exclusiva para PROMOTOR DE CAMPO */}
+            {role !== 'Administrador' && (
+              <>
+                {/* Identificación y Nacimiento */}
+                <Card className="p-4 bg-card border-border rounded-[6px] space-y-3">
+                  <h3 className="text-[12px] font-semibold text-foreground uppercase tracking-wider flex items-center gap-1.5">
+                    <CreditCard className="w-4 h-4 text-primary" />
+                    2. Identificación
+                  </h3>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-text-secondary text-[12px] font-medium mb-1">CURP (18 caracteres) *</label>
+                      <Input
+                        type="text"
+                        required
+                        maxLength={18}
+                        disabled={isSubmitting}
+                        placeholder="ABCD123456HDFRRR01"
+                        value={curp}
+                        onChange={(e) => setCurp(e.target.value.toUpperCase())}
+                        className="h-[36px] bg-white border-border text-[13px] uppercase font-mono"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-text-secondary text-[12px] font-medium mb-1">Folio del INE *</label>
+                      <Input
+                        type="text"
+                        required
+                        disabled={isSubmitting}
+                        placeholder="IDMEX123456789"
+                        value={folioIne}
+                        onChange={(e) => setFolioIne(e.target.value.toUpperCase())}
+                        className="h-[36px] bg-white border-border text-[13px] uppercase font-mono"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-text-secondary text-[12px] font-medium mb-1">Fecha de Nacimiento *</label>
+                      <Input
+                        type="date"
+                        required
+                        min="1930-01-01"
+                        max={`${new Date().getFullYear() - 18}-12-31`}
+                        disabled={isSubmitting}
+                        value={fechaNacimiento}
+                        onChange={(e) => setFechaNacimiento(e.target.value)}
+                        className="h-[36px] bg-white border-border text-[13px] font-mono"
+                      />
+                    </div>
+                  </div>
+                </Card>
+
+                {/* Dirección */}
+                <Card className="p-4 bg-card border-border rounded-[6px] space-y-3">
+                  <h3 className="text-[12px] font-semibold text-foreground uppercase tracking-wider flex items-center gap-1.5">
+                    <MapPin className="w-4 h-4 text-primary" />
+                    3. Dirección
+                  </h3>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="sm:col-span-2">
+                      <label className="block text-text-secondary text-[12px] font-medium mb-1">Calle *</label>
+                      <Input
+                        type="text"
+                        required
+                        disabled={isSubmitting}
+                        placeholder="Av. Benito Juárez"
+                        value={calle}
+                        onChange={(e) => setCalle(e.target.value)}
+                        className="h-[36px] bg-white border-border text-[13px]"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className="block text-slate-300 font-semibold mb-1">CURP (18 caracteres) *</label>
-                        <input
+                        <label className="block text-text-secondary text-[12px] font-medium mb-1">N° Ext *</label>
+                        <Input
                           type="text"
                           required
-                          maxLength={18}
                           disabled={isSubmitting}
-                          placeholder="ABCD123456HDFRRR01"
-                          value={curp}
-                          onChange={(e) => setCurp(e.target.value.toUpperCase())}
-                          className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs uppercase font-mono focus:outline-none focus:border-indigo-500 disabled:opacity-50"
+                          placeholder="123"
+                          value={numExterior}
+                          onChange={(e) => setNumExterior(e.target.value)}
+                          className="h-[36px] bg-white border-border text-[13px]"
                         />
                       </div>
-
                       <div>
-                        <label className="block text-slate-300 font-semibold mb-1">Folio del INE *</label>
-                        <input
+                        <label className="block text-text-secondary text-[12px] font-medium mb-1">N° Int</label>
+                        <Input
                           type="text"
-                          required
                           disabled={isSubmitting}
-                          placeholder="IDMEX123456789"
-                          value={folioIne}
-                          onChange={(e) => setFolioIne(e.target.value.toUpperCase())}
-                          className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs uppercase font-mono focus:outline-none focus:border-indigo-500 disabled:opacity-50"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-slate-300 font-semibold mb-1">Fecha de Nacimiento *</label>
-                        <input
-                          type="date"
-                          required
-                          min="1930-01-01"
-                          max={`${new Date().getFullYear() - 18}-12-31`}
-                          disabled={isSubmitting}
-                          value={fechaNacimiento}
-                          onChange={(e) => setFechaNacimiento(e.target.value)}
-                          className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-indigo-500 disabled:opacity-50 font-mono [color-scheme:dark]"
+                          placeholder="A-2"
+                          value={numInterior}
+                          onChange={(e) => setNumInterior(e.target.value)}
+                          className="h-[36px] bg-white border-border text-[13px]"
                         />
                       </div>
                     </div>
                   </div>
 
-                  {/* Dirección */}
-                  <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 space-y-3">
-                    <h3 className="text-xs font-extrabold text-white uppercase tracking-wider flex items-center gap-1.5">
-                      <MapPin className="w-4 h-4 text-white stroke-[2.5]" />
-                      3. Dirección
-                    </h3>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      <div className="sm:col-span-2">
-                        <label className="block text-slate-300 font-semibold mb-1">Calle *</label>
-                        <input
-                          type="text"
-                          required
-                          disabled={isSubmitting}
-                          placeholder="Av. Benito Juárez"
-                          value={calle}
-                          onChange={(e) => setCalle(e.target.value)}
-                          className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500 disabled:opacity-50"
-                        />
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="block text-slate-300 font-semibold mb-1">N° Ext *</label>
-                          <input
-                            type="text"
-                            required
-                            disabled={isSubmitting}
-                            placeholder="123"
-                            value={numExterior}
-                            onChange={(e) => setNumExterior(e.target.value)}
-                            className="w-full px-2 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500 disabled:opacity-50"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-slate-300 font-semibold mb-1">N° Int</label>
-                          <input
-                            type="text"
-                            disabled={isSubmitting}
-                            placeholder="A-2"
-                            value={numInterior}
-                            onChange={(e) => setNumInterior(e.target.value)}
-                            className="w-full px-2 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500 disabled:opacity-50"
-                          />
-                        </div>
-                      </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-text-secondary text-[12px] font-medium mb-1">Colonia *</label>
+                      <Input
+                        type="text"
+                        required
+                        disabled={isSubmitting}
+                        placeholder="Col. Centro"
+                        value={colonia}
+                        onChange={(e) => setColonia(e.target.value)}
+                        className="h-[36px] bg-white border-border text-[13px]"
+                      />
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      <div>
-                        <label className="block text-slate-300 font-semibold mb-1">Colonia *</label>
-                        <input
+                    <div>
+                      <label className="block text-text-secondary text-[12px] font-medium mb-1">Código Postal (5 dígitos) *</label>
+                      <Input
+                        type="text"
+                        required
+                        maxLength={5}
+                        disabled={isSubmitting}
+                        placeholder="50000"
+                        value={codigoPostal}
+                        onChange={(e) => setCodigoPostal(onlyDigits(e.target.value, 5))}
+                        className="h-[36px] bg-white border-border text-[13px] font-mono"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-text-secondary text-[12px] font-medium mb-1">Ciudad / Municipio *</label>
+                      <Input
+                        type="text"
+                        required
+                        disabled={isSubmitting}
+                        placeholder="Toluca"
+                        value={ciudad}
+                        onChange={(e) => setCiudad(e.target.value)}
+                        className="h-[36px] bg-white border-border text-[13px]"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-text-secondary text-[12px] font-medium mb-1">Estado *</label>
+                    <Input
+                      type="text"
+                      required
+                      disabled={isSubmitting}
+                      placeholder="Ej. Estado de México"
+                      value={estado}
+                      onChange={(e) => setEstado(e.target.value)}
+                      className="h-[36px] bg-white border-border text-[13px]"
+                    />
+                  </div>
+                </Card>
+
+                {/* Referencias Personales (Con Dirección Seccionada) */}
+                <Card className="p-4 bg-card border-border rounded-[6px] space-y-3">
+                  <h3 className="text-[12px] font-semibold text-foreground uppercase tracking-wider flex items-center gap-1.5">
+                    <FileText className="w-4 h-4 text-primary" />
+                    4. Referencias Personales (2 Obligatorias)
+                  </h3>
+
+                  {/* Referencia 1 */}
+                  <Card className="p-3.5 bg-surface-subtle border-border rounded-[6px] space-y-3">
+                    <p className="text-[12px] font-semibold text-foreground">Referencia 1</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <Input
+                        type="text"
+                        required
+                        disabled={isSubmitting}
+                        placeholder="Nombre Completo *"
+                        value={ref1Nombre}
+                        onChange={(e) => setRef1Nombre(e.target.value)}
+                        className="h-[34px] bg-white border-border text-[12.5px]"
+                      />
+                      <Select
+                        value={ref1Parentesco}
+                        disabled={isSubmitting}
+                        onValueChange={(val) => setRef1Parentesco(val)}
+                      >
+                        <SelectTrigger className="h-[34px] bg-white border-border text-[12.5px]">
+                          <SelectValue placeholder="Parentesco" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Familiar">Familiar</SelectItem>
+                          <SelectItem value="Amigo">Amigo</SelectItem>
+                          <SelectItem value="Vecino">Vecino</SelectItem>
+                          <SelectItem value="Compañero de Trabajo / Socio">Compañero de Trabajo</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        type="tel"
+                        required
+                        maxLength={10}
+                        disabled={isSubmitting}
+                        placeholder="Teléfono (10 dígitos) *"
+                        value={ref1Telefono}
+                        onChange={(e) => setRef1Telefono(onlyDigits(e.target.value, 10))}
+                        className="h-[34px] bg-white border-border text-[12.5px] font-mono"
+                      />
+                    </div>
+
+                    {/* Dirección Seccionada Referencia 1 */}
+                    <div className="space-y-2 pt-2 border-t border-border">
+                      <p className="text-[11px] font-semibold text-text-muted">Dirección de Referencia 1 *</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        <Input
                           type="text"
                           required
                           disabled={isSubmitting}
-                          placeholder="Col. Centro"
-                          value={colonia}
-                          onChange={(e) => setColonia(e.target.value)}
-                          className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500 disabled:opacity-50"
+                          placeholder="Calle *"
+                          value={ref1Calle}
+                          onChange={(e) => setRef1Calle(e.target.value)}
+                          className="h-[34px] bg-white border-border text-[12.5px]"
+                        />
+                        <Input
+                          type="text"
+                          required
+                          disabled={isSubmitting}
+                          placeholder="N° Ext *"
+                          value={ref1NumExt}
+                          onChange={(e) => setRef1NumExt(e.target.value)}
+                          className="h-[34px] bg-white border-border text-[12.5px]"
+                        />
+                        <Input
+                          type="text"
+                          disabled={isSubmitting}
+                          placeholder="N° Int"
+                          value={ref1NumInt}
+                          onChange={(e) => setRef1NumInt(e.target.value)}
+                          className="h-[34px] bg-white border-border text-[12.5px]"
                         />
                       </div>
-
-                      <div>
-                        <label className="block text-slate-300 font-semibold mb-1">Código Postal (5 dígitos) *</label>
-                        <input
+                      <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+                        <Input
+                          type="text"
+                          required
+                          disabled={isSubmitting}
+                          placeholder="Colonia *"
+                          value={ref1Colonia}
+                          onChange={(e) => setRef1Colonia(e.target.value)}
+                          className="h-[34px] bg-white border-border text-[12.5px]"
+                        />
+                        <Input
                           type="text"
                           required
                           maxLength={5}
                           disabled={isSubmitting}
-                          placeholder="50000"
-                          value={codigoPostal}
-                          onChange={(e) => setCodigoPostal(onlyDigits(e.target.value, 5))}
-                          className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs font-mono focus:outline-none focus:border-emerald-500 disabled:opacity-50"
+                          placeholder="C.P. (5 dígitos) *"
+                          value={ref1CP}
+                          onChange={(e) => setRef1CP(onlyDigits(e.target.value, 5))}
+                          className="h-[34px] bg-white border-border text-[12.5px] font-mono"
                         />
-                      </div>
-
-                      <div>
-                        <label className="block text-slate-300 font-semibold mb-1">Ciudad / Municipio *</label>
-                        <input
+                        <Input
                           type="text"
                           required
                           disabled={isSubmitting}
-                          placeholder="Toluca"
-                          value={ciudad}
-                          onChange={(e) => setCiudad(e.target.value)}
-                          className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500 disabled:opacity-50"
+                          placeholder="Ciudad / Mpio *"
+                          value={ref1Ciudad}
+                          onChange={(e) => setRef1Ciudad(e.target.value)}
+                          className="h-[34px] bg-white border-border text-[12.5px]"
+                        />
+                        <Input
+                          type="text"
+                          required
+                          disabled={isSubmitting}
+                          placeholder="Estado *"
+                          value={ref1Estado}
+                          onChange={(e) => setRef1Estado(e.target.value)}
+                          className="h-[34px] bg-white border-border text-[12.5px]"
                         />
                       </div>
                     </div>
+                  </Card>
 
-                    <div>
-                      <label className="block text-slate-300 font-semibold mb-1">Estado *</label>
-                      <input
+                  {/* Referencia 2 */}
+                  <Card className="p-3.5 bg-surface-subtle border-border rounded-[6px] space-y-3">
+                    <p className="text-[12px] font-semibold text-foreground">Referencia 2</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <Input
                         type="text"
                         required
                         disabled={isSubmitting}
-                        placeholder="Ej. Estado de México"
-                        value={estado}
-                        onChange={(e) => setEstado(e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-emerald-500 disabled:opacity-50"
+                        placeholder="Nombre Completo *"
+                        value={ref2Nombre}
+                        onChange={(e) => setRef2Nombre(e.target.value)}
+                        className="h-[34px] bg-white border-border text-[12.5px]"
+                      />
+                      <Select
+                        value={ref2Parentesco}
+                        disabled={isSubmitting}
+                        onValueChange={(val) => setRef2Parentesco(val)}
+                      >
+                        <SelectTrigger className="h-[34px] bg-white border-border text-[12.5px]">
+                          <SelectValue placeholder="Parentesco" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Familiar">Familiar</SelectItem>
+                          <SelectItem value="Amigo">Amigo</SelectItem>
+                          <SelectItem value="Vecino">Vecino</SelectItem>
+                          <SelectItem value="Compañero de Trabajo / Socio">Compañero de Trabajo</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        type="tel"
+                        required
+                        maxLength={10}
+                        disabled={isSubmitting}
+                        placeholder="Teléfono (10 dígitos) *"
+                        value={ref2Telefono}
+                        onChange={(e) => setRef2Telefono(onlyDigits(e.target.value, 10))}
+                        className="h-[34px] bg-white border-border text-[12.5px] font-mono"
                       />
                     </div>
-                  </div>
 
-                  {/* Referencias Personales (Con Dirección Seccionada) */}
-                  <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 space-y-3">
-                    <h3 className="text-xs font-extrabold text-white uppercase tracking-wider flex items-center gap-1.5">
-                      <FileText className="w-4 h-4 text-white stroke-[2.5]" />
-                      4. Referencias Personales (2 Obligatorias)
-                    </h3>
-
-                    {/* Referencia 1 */}
-                    <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-3">
-                      <p className="text-xs font-bold text-slate-200">Referencia 1</p>
+                    {/* Dirección Seccionada Referencia 2 */}
+                    <div className="space-y-2 pt-2 border-t border-border">
+                      <p className="text-[11px] font-semibold text-text-muted">Dirección de Referencia 2 *</p>
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                        <input
+                        <Input
                           type="text"
                           required
                           disabled={isSubmitting}
-                          placeholder="Nombre Completo *"
-                          value={ref1Nombre}
-                          onChange={(e) => setRef1Nombre(e.target.value)}
-                          className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs"
+                          placeholder="Calle *"
+                          value={ref2Calle}
+                          onChange={(e) => setRef2Calle(e.target.value)}
+                          className="h-[34px] bg-white border-border text-[12.5px]"
                         />
-                        <select
-                          value={ref1Parentesco}
-                          disabled={isSubmitting}
-                          onChange={(e) => setRef1Parentesco(e.target.value)}
-                          className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs"
-                        >
-                          <option value="Familiar">Familiar</option>
-                          <option value="Amigo">Amigo</option>
-                          <option value="Vecino">Vecino</option>
-                          <option value="Compañero de Trabajo / Socio">Compañero de Trabajo</option>
-                        </select>
-                        <input
-                          type="tel"
-                          required
-                          maxLength={10}
-                          disabled={isSubmitting}
-                          placeholder="Teléfono (10 dígitos) *"
-                          value={ref1Telefono}
-                          onChange={(e) => setRef1Telefono(onlyDigits(e.target.value, 10))}
-                          className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs font-mono"
-                        />
-                      </div>
-
-                      {/* Dirección Seccionada Referencia 1 */}
-                      <div className="space-y-2 pt-1 border-t border-slate-800/80">
-                        <p className="text-[11px] font-semibold text-slate-400">Dirección de Referencia 1 *</p>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                          <input
-                            type="text"
-                            required
-                            disabled={isSubmitting}
-                            placeholder="Calle *"
-                            value={ref1Calle}
-                            onChange={(e) => setRef1Calle(e.target.value)}
-                            className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs"
-                          />
-                          <input
-                            type="text"
-                            required
-                            disabled={isSubmitting}
-                            placeholder="N° Ext *"
-                            value={ref1NumExt}
-                            onChange={(e) => setRef1NumExt(e.target.value)}
-                            className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs"
-                          />
-                          <input
-                            type="text"
-                            disabled={isSubmitting}
-                            placeholder="N° Int"
-                            value={ref1NumInt}
-                            onChange={(e) => setRef1NumInt(e.target.value)}
-                            className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs"
-                          />
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
-                          <input
-                            type="text"
-                            required
-                            disabled={isSubmitting}
-                            placeholder="Colonia *"
-                            value={ref1Colonia}
-                            onChange={(e) => setRef1Colonia(e.target.value)}
-                            className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs"
-                          />
-                          <input
-                            type="text"
-                            required
-                            maxLength={5}
-                            disabled={isSubmitting}
-                            placeholder="C.P. (5 dígitos) *"
-                            value={ref1CP}
-                            onChange={(e) => setRef1CP(onlyDigits(e.target.value, 5))}
-                            className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs font-mono"
-                          />
-                          <input
-                            type="text"
-                            required
-                            disabled={isSubmitting}
-                            placeholder="Ciudad / Mpio *"
-                            value={ref1Ciudad}
-                            onChange={(e) => setRef1Ciudad(e.target.value)}
-                            className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs"
-                          />
-                          <input
-                            type="text"
-                            required
-                            disabled={isSubmitting}
-                            placeholder="Estado *"
-                            value={ref1Estado}
-                            onChange={(e) => setRef1Estado(e.target.value)}
-                            className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs"
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Referencia 2 */}
-                    <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-3">
-                      <p className="text-xs font-bold text-slate-200">Referencia 2</p>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                        <input
+                        <Input
                           type="text"
                           required
                           disabled={isSubmitting}
-                          placeholder="Nombre Completo *"
-                          value={ref2Nombre}
-                          onChange={(e) => setRef2Nombre(e.target.value)}
-                          className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs"
+                          placeholder="N° Ext *"
+                          value={ref2NumExt}
+                          onChange={(e) => setRef2NumExt(e.target.value)}
+                          className="h-[34px] bg-white border-border text-[12.5px]"
                         />
-                        <select
-                          value={ref2Parentesco}
+                        <Input
+                          type="text"
                           disabled={isSubmitting}
-                          onChange={(e) => setRef2Parentesco(e.target.value)}
-                          className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs"
-                        >
-                          <option value="Familiar">Familiar</option>
-                          <option value="Amigo">Amigo</option>
-                          <option value="Vecino">Vecino</option>
-                          <option value="Compañero de Trabajo / Socio">Compañero de Trabajo</option>
-                        </select>
-                        <input
-                          type="tel"
-                          required
-                          maxLength={10}
-                          disabled={isSubmitting}
-                          placeholder="Teléfono (10 dígitos) *"
-                          value={ref2Telefono}
-                          onChange={(e) => setRef2Telefono(onlyDigits(e.target.value, 10))}
-                          className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs font-mono"
+                          placeholder="N° Int"
+                          value={ref2NumInt}
+                          onChange={(e) => setRef2NumInt(e.target.value)}
+                          className="h-[34px] bg-white border-border text-[12.5px]"
                         />
                       </div>
-
-                      {/* Dirección Seccionada Referencia 2 */}
-                      <div className="space-y-2 pt-1 border-t border-slate-800/80">
-                        <p className="text-[11px] font-semibold text-slate-400">Dirección de Referencia 2 *</p>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                          <input
-                            type="text"
-                            required
-                            disabled={isSubmitting}
-                            placeholder="Calle *"
-                            value={ref2Calle}
-                            onChange={(e) => setRef2Calle(e.target.value)}
-                            className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs"
-                          />
-                          <input
-                            type="text"
-                            required
-                            disabled={isSubmitting}
-                            placeholder="N° Ext *"
-                            value={ref2NumExt}
-                            onChange={(e) => setRef2NumExt(e.target.value)}
-                            className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs"
-                          />
-                          <input
-                            type="text"
-                            disabled={isSubmitting}
-                            placeholder="N° Int"
-                            value={ref2NumInt}
-                            onChange={(e) => setRef2NumInt(e.target.value)}
-                            className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs"
-                          />
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
-                          <input
-                            type="text"
-                            required
-                            disabled={isSubmitting}
-                            placeholder="Colonia *"
-                            value={ref2Colonia}
-                            onChange={(e) => setRef2Colonia(e.target.value)}
-                            className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs"
-                          />
-                          <input
-                            type="text"
-                            required
-                            maxLength={5}
-                            disabled={isSubmitting}
-                            placeholder="C.P. (5 dígitos) *"
-                            value={ref2CP}
-                            onChange={(e) => setRef2CP(onlyDigits(e.target.value, 5))}
-                            className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs font-mono"
-                          />
-                          <input
-                            type="text"
-                            required
-                            disabled={isSubmitting}
-                            placeholder="Ciudad / Mpio *"
-                            value={ref2Ciudad}
-                            onChange={(e) => setRef2Ciudad(e.target.value)}
-                            className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs"
-                          />
-                          <input
-                            type="text"
-                            required
-                            disabled={isSubmitting}
-                            placeholder="Estado *"
-                            value={ref2Estado}
-                            onChange={(e) => setRef2Estado(e.target.value)}
-                            className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-xs"
-                          />
-                        </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+                        <Input
+                          type="text"
+                          required
+                          disabled={isSubmitting}
+                          placeholder="Colonia *"
+                          value={ref2Colonia}
+                          onChange={(e) => setRef2Colonia(e.target.value)}
+                          className="h-[34px] bg-white border-border text-[12.5px]"
+                        />
+                        <Input
+                          type="text"
+                          required
+                          maxLength={5}
+                          disabled={isSubmitting}
+                          placeholder="C.P. (5 dígitos) *"
+                          value={ref2CP}
+                          onChange={(e) => setRef2CP(onlyDigits(e.target.value, 5))}
+                          className="h-[34px] bg-white border-border text-[12.5px] font-mono"
+                        />
+                        <Input
+                          type="text"
+                          required
+                          disabled={isSubmitting}
+                          placeholder="Ciudad / Mpio *"
+                          value={ref2Ciudad}
+                          onChange={(e) => setRef2Ciudad(e.target.value)}
+                          className="h-[34px] bg-white border-border text-[12.5px]"
+                        />
+                        <Input
+                          type="text"
+                          required
+                          disabled={isSubmitting}
+                          placeholder="Estado *"
+                          value={ref2Estado}
+                          onChange={(e) => setRef2Estado(e.target.value)}
+                          className="h-[34px] bg-white border-border text-[12.5px]"
+                        />
                       </div>
                     </div>
-                  </div>
-                </>
-              )}
+                  </Card>
+                </Card>
+              </>
+            )}
 
-              {/* Selección Opcional de Avatar / Foto */}
-              <div className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 space-y-2.5">
-                <div className="flex justify-between items-center">
-                  <label className="text-slate-300 font-semibold flex items-center gap-1.5 text-xs">
-                    <Camera className="w-3.5 h-3.5 text-emerald-400" />
-                    Foto de Perfil / Avatar <span className="text-slate-500 font-normal">(Opcional)</span>
-                  </label>
+            {/* Selección Opcional de Avatar / Foto */}
+            <Card className="p-3.5 bg-card border-border rounded-[6px] space-y-2.5">
+              <div className="flex justify-between items-center">
+                <label className="text-text-secondary font-medium flex items-center gap-1.5 text-[12px]">
+                  <Camera className="w-3.5 h-3.5 text-primary" />
+                  Foto de Perfil / Avatar <span className="text-text-muted font-normal">(Opcional)</span>
+                </label>
 
-                  {avatar && (
-                    <button
-                      type="button"
-                      disabled={isSubmitting}
-                      onClick={() => setAvatar('')}
-                      className="text-[10px] text-rose-400 hover:underline disabled:opacity-50"
-                    >
-                      Quitar foto
-                    </button>
-                  )}
-                </div>
+                {avatar && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={isSubmitting}
+                    onClick={() => setAvatar('')}
+                    className="h-auto p-0 text-[11px] text-badge-danger-text hover:text-badge-danger-text hover:underline"
+                  >
+                    Quitar foto
+                  </Button>
+                )}
+              </div>
 
-                <div className="flex items-center gap-3">
-                  <div className="shrink-0">
-                    {avatar ? (
-                      <img
-                        src={avatar}
-                        alt="Previsualización"
-                        className="w-11 h-11 rounded-full object-cover border-2 border-emerald-400 shadow-md"
-                      />
-                    ) : (
-                      <div className="w-11 h-11 rounded-full bg-gradient-to-tr from-emerald-500 to-teal-400 text-slate-950 font-black flex items-center justify-center text-sm shadow-md">
-                        {name ? getInitials(name) : 'A'}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex-1 space-y-2">
-                    <input
-                      type="url"
-                      disabled={isSubmitting}
-                      placeholder="https://ejemplo.com/foto.jpg"
-                      value={avatar}
-                      onChange={(e) => setAvatar(e.target.value)}
-                      className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-700 text-white text-[11px] focus:outline-none focus:border-emerald-500 disabled:opacity-50"
+              <div className="flex items-center gap-3">
+                <div className="shrink-0">
+                  {avatar ? (
+                    <img
+                      src={avatar}
+                      alt="Previsualización"
+                      className="w-10 h-10 rounded-full object-cover border-2 border-primary shadow-xs"
                     />
-
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[10px] text-slate-400">Presets:</span>
-                      {PRESET_AVATARS.map((url, idx) => (
-                        <button
-                          key={idx}
-                          type="button"
-                          disabled={isSubmitting}
-                          onClick={() => setAvatar(url)}
-                          className={`w-6 h-6 rounded-full overflow-hidden border transition-all ${
-                            avatar === url ? 'border-emerald-400 ring-2 ring-emerald-500/40 scale-110' : 'border-slate-700 opacity-60 hover:opacity-100'
-                          }`}
-                        >
-                          <img src={url} alt={`Preset ${idx}`} className="w-full h-full object-cover" />
-                        </button>
-                      ))}
+                  ) : (
+                    <div className="w-10 h-10 rounded-full bg-surface-subtle text-foreground font-semibold flex items-center justify-center text-[12px] border border-border">
+                      {name ? getInitials(name) : 'A'}
                     </div>
+                  )}
+                </div>
+
+                <div className="flex-1 space-y-2">
+                  <Input
+                    type="url"
+                    disabled={isSubmitting}
+                    placeholder="https://ejemplo.com/foto.jpg"
+                    value={avatar}
+                    onChange={(e) => setAvatar(e.target.value)}
+                    className="h-[34px] bg-white border-border text-[12px]"
+                  />
+
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] text-text-muted">Presets:</span>
+                    {PRESET_AVATARS.map((url, idx) => (
+                      <Button
+                        key={idx}
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        disabled={isSubmitting}
+                        onClick={() => setAvatar(url)}
+                        className={`w-6 h-6 rounded-full overflow-hidden p-0 border transition-all ${
+                          avatar === url ? 'border-primary ring-2 ring-primary/40 scale-110' : 'border-border opacity-70 hover:opacity-100'
+                        }`}
+                      >
+                        <img src={url} alt={`Preset ${idx}`} className="w-full h-full object-cover" />
+                      </Button>
+                    ))}
                   </div>
                 </div>
               </div>
+            </Card>
 
-              {/* Botones de Acción */}
-              <div className="pt-4 flex items-center justify-end gap-3 border-t border-slate-800">
-                <button
-                  type="button"
-                  disabled={isSubmitting}
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 font-semibold text-xs transition-all disabled:opacity-50"
-                >
-                  Cancelar (Esc)
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="px-5 py-2.5 rounded-xl text-slate-950 bg-emerald-500 hover:bg-emerald-400 font-extrabold text-xs shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isSubmitting ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Guardando...
-                    </>
-                  ) : editingUserId ? (
-                    'Guardar Cambios'
-                  ) : (
-                    'Registrar Colaborador'
-                  )}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+            {/* Botones de Acción */}
+            <div className="pt-3 flex items-center justify-end gap-2.5 border-t border-border">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isSubmitting}
+                onClick={() => setIsModalOpen(false)}
+                className="h-[34px] px-3.5 text-[13px]"
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="submit"
+                disabled={isSubmitting}
+                className="h-[34px] px-4 text-[13px] font-medium"
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> Guardando...
+                  </>
+                ) : editingUserId ? (
+                  'Guardar Cambios'
+                ) : (
+                  'Registrar Colaborador'
+                )}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
