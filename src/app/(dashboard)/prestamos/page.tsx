@@ -410,7 +410,7 @@ export default function LoansPage() {
                       {loan.fechaHoraSolicitud ? formatDateWithTime(loan.fechaHoraSolicitud) : formatDate(loan.fechaInicio)}
                     </p>
                     {loan.estatus === 'En Evaluación' ? (
-                      <Badge variant="warning" className="text-[10px] px-1.5 py-0 font-medium">
+                      <Badge variant="warning" className="text-[11px] px-1.5 py-0 font-medium">
                         Pendiente Dictamen
                       </Badge>
                     ) : (

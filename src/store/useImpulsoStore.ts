@@ -114,7 +114,7 @@ export const useImpulsoStore = create<ImpulsoStoreState>()((set, get) => ({
           users: res.users,
           products: res.products,
           payments: res.payments,
-          closures: (res as any).closures || [],
+          closures: res.closures || [],
         });
       }
     } finally {

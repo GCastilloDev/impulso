@@ -970,9 +970,9 @@ export default function CollectionPage() {
                                   </TableCell>
                                   <TableCell className="py-2 text-center">
                                     {p.esAbonoParcial ? (
-                                      <Badge variant="warning" className="text-[10px] px-1.5 py-0">Parcial</Badge>
+                                      <Badge variant="warning" className="text-[11px] px-1.5 py-0">Parcial</Badge>
                                     ) : (
-                                      <Badge variant="success" className="text-[10px] px-1.5 py-0">Liquidada</Badge>
+                                      <Badge variant="success" className="text-[11px] px-1.5 py-0">Liquidada</Badge>
                                     )}
                                   </TableCell>
                                 </TableRow>
@@ -1200,7 +1200,7 @@ export default function CollectionPage() {
                     <div>
                       <span className="text-text-muted text-[11px] block font-medium">Monto Depositado:</span>
                       <strong className="text-foreground font-mono text-[14px] font-medium block text-right">
-                        {formatCurrency(c.totalCobrado)} <span className="text-[10px] font-sans text-text-muted">MXN</span>
+                        {formatCurrency(c.totalCobrado)} <span className="text-[11px] font-sans text-text-muted">MXN</span>
                       </strong>
                     </div>
                     <div>

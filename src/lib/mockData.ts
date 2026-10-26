@@ -1,4 +1,4 @@
-import { Client, FinancialProduct, Loan, PaymentRecord, User } from '@/types';
+import { FinancialProduct, Loan, PaymentRecord, User } from '@/types';
 import { calculateAmortizationSchedule } from './financialCalculators';
 import { getTodayDateString, addDays } from './utils';
 

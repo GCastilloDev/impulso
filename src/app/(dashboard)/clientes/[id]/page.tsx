@@ -88,7 +88,7 @@ function CopyButton({ text, label = 'Copiar' }: { text: string; label?: string }
       aria-label={`${label} al portapapeles`}
     >
       {copied ? (
-        <span className="inline-flex items-center gap-0.5 text-[10px] text-badge-success-text font-semibold bg-badge-success-bg px-1.5 py-0.5 rounded-[3px]">
+        <span className="inline-flex items-center gap-0.5 text-[11px] text-badge-success-text font-semibold bg-badge-success-bg px-1.5 py-0.5 rounded-[3px]">
           <Check className="w-2.5 h-2.5" /> Copiado
         </span>
       ) : (
@@ -1006,7 +1006,7 @@ export default function ClientDetailPage() {
                     </TableCell>
                     <TableCell className="font-mono text-right font-medium">
                       {formatCurrency(inst.cuotaTotal)}{' '}
-                      <span className="text-[10px] text-text-muted">MXN</span>
+                      <span className="text-[11px] font-sans text-text-muted">MXN</span>
                     </TableCell>
                     <TableCell className="font-mono text-right text-text-secondary">
                       {formatCurrency(inst.montoPagado)}
@@ -1095,9 +1095,9 @@ export default function ClientDetailPage() {
                     </TableCell>
                     <TableCell className="text-right font-mono font-semibold text-foreground">
                       +{formatCurrency(payment.montoRecibido)}{' '}
-                      <span className="text-[10px] text-text-muted">MXN</span>
+                      <span className="text-[11px] font-sans text-text-muted">MXN</span>
                       {payment.penalizacionCobrada > 0 && (
-                        <div className="text-[10px] text-badge-danger-text font-normal">
+                        <div className="text-[11px] font-mono text-badge-danger-text font-normal">
                           (inc. {formatCurrency(payment.penalizacionCobrada)} mora)
                         </div>
                       )}

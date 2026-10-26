@@ -42,7 +42,7 @@ export function Navbar({ onToggleSidebar }: NavbarProps) {
             placeholder="Buscar clientes, créditos, pólizas..."
             className="bg-transparent border-none outline-none text-[13px] text-foreground placeholder:text-text-muted w-full focus:outline-none"
           />
-          <kbd className="hidden md:inline-flex items-center px-1.5 py-0.5 text-[10px] font-mono text-text-muted bg-white border border-border rounded-[3px] shadow-2xs font-medium shrink-0">
+          <kbd className="hidden md:inline-flex items-center px-1.5 py-0.5 text-[11px] font-mono text-text-muted bg-white border border-border rounded-[3px] shadow-2xs font-medium shrink-0">
             ⌘K
           </kbd>
         </div>

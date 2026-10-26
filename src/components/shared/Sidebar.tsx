@@ -104,7 +104,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                   Financiera Impulso
                 </span>
                 <div className="flex items-center gap-1.5 mt-0.5">
-                  <Badge variant="secondary" className="px-1.5 py-0 text-[10px] h-4 font-medium leading-none">
+                  <Badge variant="secondary" className="px-1.5 py-0 text-[11px] h-[18px] font-medium leading-none">
                     Operativo
                   </Badge>
                   <span className="text-[11px] text-text-muted truncate">Matriz</span>
