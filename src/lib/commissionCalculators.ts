@@ -86,7 +86,7 @@ export function calculatePromoterCommission(params: {
   const {
     promotorNombre,
     clients,
-    loans,
+    loans: _loans,
     payments,
     startDate,
     endDate,

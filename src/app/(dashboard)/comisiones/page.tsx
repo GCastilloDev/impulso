@@ -215,7 +215,7 @@ export default function ComisionesPage() {
                   {tier.percentage}%
                 </span>
                 {isCurrentTier && (
-                  <span className="inline-block mt-1 text-[9px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-500 text-slate-950 uppercase">
+                  <span className="inline-block mt-1 text-[11px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-500 text-slate-950 uppercase">
                     Tu Escalón
                   </span>
                 )}
