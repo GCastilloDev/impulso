@@ -15,7 +15,6 @@ import {
   Loader2,
   Layers,
   AlertCircle,
-  X,
   LayoutGrid,
   Table as TableIcon,
 } from 'lucide-react';
@@ -30,6 +29,20 @@ import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 export default function ProductsPage() {
   const { products, currentUser, loadDataFromDB } = useImpulsoStore();
@@ -61,16 +74,6 @@ export default function ProductsPage() {
       isMounted = false;
     };
   }, [loadDataFromDB]);
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isModalOpen) {
-        setIsModalOpen(false);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isModalOpen]);
 
   const isAdmin = currentUser?.role === 'Administrador';
 
@@ -571,201 +574,199 @@ export default function ProductsPage() {
       />
 
       {/* Modal Creación / Edición de Producto (Stripe Styled) */}
-      {isModalOpen && (
-        <div
-          className="fixed inset-0 z-50 bg-foreground/40 backdrop-blur-[2px] flex items-center justify-center p-4"
-          onClick={(e) => {
-            // Regla estricta: No cerrar modal al hacer click en el backdrop
-            e.stopPropagation();
-          }}
+      <Dialog
+        open={isModalOpen}
+        onOpenChange={(open) => {
+          if (!open && !isSaving) {
+            setIsModalOpen(false);
+          }
+        }}
+      >
+        <DialogContent
+          ref={modalScrollRef}
+          className="max-w-lg max-h-[90vh] overflow-y-auto"
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onInteractOutside={(e) => e.preventDefault()}
         >
-          <div
-            ref={modalScrollRef}
-            className="bg-card text-card-foreground w-full max-w-lg p-6 rounded-[8px] border border-border shadow-lg space-y-4 max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-150"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex justify-between items-center pb-2 border-b border-border">
-              <h2 className="text-[16px] font-semibold text-foreground flex items-center gap-2">
-                <Settings className="w-5 h-5 text-primary" />
-                {editingProductId ? 'Editar Producto Financiero' : 'Nuevo Producto Financiero'}
-              </h2>
+          <DialogHeader className="border-b border-border pb-2 pr-6 text-left">
+            <DialogTitle className="text-[16px] font-semibold text-foreground flex items-center gap-2">
+              <Settings className="w-5 h-5 text-primary" />
+              {editingProductId ? 'Editar Producto Financiero' : 'Nuevo Producto Financiero'}
+            </DialogTitle>
+            <DialogDescription className="text-[12px] text-text-muted">
+              {editingProductId
+                ? 'Modifica las condiciones comerciales y tasas del producto financiero.'
+                : 'Configura las tasas, plazos y esquemas de penalización del nuevo producto.'}
+            </DialogDescription>
+          </DialogHeader>
 
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                onClick={() => setIsModalOpen(false)}
-                className="h-8 w-8 text-text-muted hover:text-foreground rounded-[4px]"
-                title="Cerrar modal (Esc)"
-              >
-                <X className="w-4 h-4" />
-              </Button>
+          {/* Error Banner */}
+          {errorMsg && (
+            <div className="p-3 rounded-[6px] bg-badge-danger-bg border border-badge-danger-text/20 text-badge-danger-text text-[12.5px] font-medium flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{errorMsg}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleSave} noValidate className="space-y-4 text-[13px]">
+            {/* 1. Nombre */}
+            <div>
+              <label className="block text-text-secondary font-medium mb-1.5">
+                Nombre del Producto *
+              </label>
+              <Input
+                type="text"
+                required
+                value={nombre}
+                onChange={(e) => setNombre(e.target.value)}
+                placeholder="Ej: Microcrédito Negocio Semanal"
+                className="h-[36px]"
+              />
             </div>
 
-            {/* Error Banner */}
-            {errorMsg && (
-              <div className="p-3 rounded-[6px] bg-badge-danger-bg border border-badge-danger-text/20 text-badge-danger-text text-[12.5px] font-medium flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0" />
-                <span>{errorMsg}</span>
-              </div>
-            )}
+            {/* Descripción */}
+            <div>
+              <label className="block text-text-secondary font-medium mb-1.5">
+                Descripción
+              </label>
+              <textarea
+                rows={2}
+                value={descripcion}
+                onChange={(e) => setDescripcion(e.target.value)}
+                placeholder="Resumen del público objetivo o condiciones de colocación..."
+                className="w-full px-3 py-2 rounded-[4px] border border-border bg-white text-foreground text-[13px] placeholder:text-text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:border-primary transition-colors"
+              />
+            </div>
 
-            <form onSubmit={handleSave} noValidate className="space-y-4 text-[13px]">
-              {/* 1. Nombre */}
+            {/* 2. Frecuencia y Plazo */}
+            <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-text-secondary font-medium mb-1.5">
-                  Nombre del Producto *
+                  Frecuencia de Pago *
+                </label>
+                <Select
+                  value={frecuenciaPago}
+                  onValueChange={(val) => setFrecuenciaPago(val as FrecuenciaPago)}
+                >
+                  <SelectTrigger className="w-full h-[36px] px-3 py-1.5 rounded-[4px] border border-border bg-white text-foreground text-[13px] font-normal">
+                    <SelectValue placeholder="Selecciona frecuencia" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="semanal">Semanal</SelectItem>
+                    <SelectItem value="diario">Diario</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <label className="block text-text-secondary font-medium mb-1.5">
+                  Plazo (Número de Cuotas) *
                 </label>
                 <Input
-                  type="text"
+                  type="number"
+                  inputMode="numeric"
                   required
-                  value={nombre}
-                  onChange={(e) => setNombre(e.target.value)}
-                  placeholder="Ej: Microcrédito Negocio Semanal"
-                  className="h-[36px]"
+                  value={plazo}
+                  onChange={(e) => setPlazo(e.target.value)}
+                  placeholder="Ej: 10"
+                  className="h-[36px] font-mono [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
               </div>
+            </div>
 
-              {/* Descripción */}
-              <div>
-                <label className="block text-text-secondary font-medium mb-1.5">
-                  Descripción
-                </label>
-                <textarea
-                  rows={2}
-                  value={descripcion}
-                  onChange={(e) => setDescripcion(e.target.value)}
-                  placeholder="Resumen del público objetivo o condiciones de colocación..."
-                  className="w-full px-3 py-2 rounded-[4px] border border-border bg-white text-foreground text-[13px] placeholder:text-text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:border-primary transition-colors"
-                />
+            {/* 3. Tasa de Interés Global */}
+            <div>
+              <label className="block text-text-secondary font-medium mb-1.5">
+                Tasa de Interés Global (%) *
+              </label>
+              <Input
+                type="number"
+                inputMode="decimal"
+                required
+                value={tasaInteresGlobal}
+                onChange={(e) => setTasaInteresGlobal(e.target.value)}
+                placeholder="Ej: 15"
+                className="h-[36px] font-mono [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              />
+            </div>
+
+            {/* 4. Penalización por Mora Configurable */}
+            <div className="p-3.5 rounded-[6px] bg-surface-subtle border border-border space-y-3">
+              <label className="block text-text-secondary font-medium">
+                Penalización por Mora (Por Pago Atrasado) *
+              </label>
+
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  variant={tipoPenalizacionMora === 'porcentaje' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setTipoPenalizacionMora('porcentaje')}
+                  className="h-[32px] text-[12px]"
+                >
+                  <Percent className="w-3.5 h-3.5 mr-1" /> Porcentaje (%)
+                </Button>
+
+                <Button
+                  type="button"
+                  variant={tipoPenalizacionMora === 'monto_fijo' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setTipoPenalizacionMora('monto_fijo')}
+                  className="h-[32px] text-[12px]"
+                >
+                  <span className="mr-1">$</span> Monto Fijo ($ MXN)
+                </Button>
               </div>
 
-              {/* 2. Frecuencia y Plazo */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-text-secondary font-medium mb-1.5">
-                    Frecuencia de Pago *
-                  </label>
-                  <select
-                    value={frecuenciaPago}
-                    onChange={(e) => setFrecuenciaPago(e.target.value as FrecuenciaPago)}
-                    className="w-full h-[36px] px-3 py-1.5 rounded-[4px] border border-border bg-white text-foreground text-[13px] font-normal focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
-                  >
-                    <option value="semanal">Semanal</option>
-                    <option value="diario">Diario</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-text-secondary font-medium mb-1.5">
-                    Plazo (Número de Cuotas) *
-                  </label>
-                  <Input
-                    type="number"
-                    inputMode="numeric"
-                    required
-                    value={plazo}
-                    onChange={(e) => setPlazo(e.target.value)}
-                    placeholder="Ej: 10"
-                    className="h-[36px] font-mono [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                  />
-                </div>
-              </div>
-
-              {/* 3. Tasa de Interés Global */}
               <div>
-                <label className="block text-text-secondary font-medium mb-1.5">
-                  Tasa de Interés Global (%) *
+                <label className="block text-text-muted text-[11.5px] font-medium mb-1">
+                  {tipoPenalizacionMora === 'porcentaje'
+                    ? 'Porcentaje por cuota vencida (%):'
+                    : 'Monto fijo en pesos por cuota vencida ($ MXN):'}
                 </label>
                 <Input
                   type="number"
                   inputMode="decimal"
                   required
-                  value={tasaInteresGlobal}
-                  onChange={(e) => setTasaInteresGlobal(e.target.value)}
-                  placeholder="Ej: 15"
+                  value={valorPenalizacionMora}
+                  onChange={(e) => setValorPenalizacionMora(e.target.value)}
+                  placeholder={tipoPenalizacionMora === 'porcentaje' ? 'Ej: 5' : 'Ej: 50'}
                   className="h-[36px] font-mono [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
+                <p className="text-[11px] text-text-muted mt-1">
+                  Aplica acumulativamente por cada cuota vencida según las reglas financieras del producto.
+                </p>
               </div>
+            </div>
 
-              {/* 4. Penalización por Mora Configurable */}
-              <div className="p-3.5 rounded-[6px] bg-surface-subtle border border-border space-y-3">
-                <label className="block text-text-secondary font-medium">
-                  Penalización por Mora (Por Pago Atrasado) *
-                </label>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <Button
-                    type="button"
-                    variant={tipoPenalizacionMora === 'porcentaje' ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setTipoPenalizacionMora('porcentaje')}
-                    className="h-[32px] text-[12px]"
-                  >
-                    <Percent className="w-3.5 h-3.5 mr-1" /> Porcentaje (%)
-                  </Button>
-
-                  <Button
-                    type="button"
-                    variant={tipoPenalizacionMora === 'monto_fijo' ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setTipoPenalizacionMora('monto_fijo')}
-                    className="h-[32px] text-[12px]"
-                  >
-                    <span className="mr-1">$</span> Monto Fijo ($ MXN)
-                  </Button>
-                </div>
-
-                <div>
-                  <label className="block text-text-muted text-[11.5px] font-medium mb-1">
-                    {tipoPenalizacionMora === 'porcentaje'
-                      ? 'Porcentaje por cuota vencida (%):'
-                      : 'Monto fijo en pesos por cuota vencida ($ MXN):'}
-                  </label>
-                  <Input
-                    type="number"
-                    inputMode="decimal"
-                    required
-                    value={valorPenalizacionMora}
-                    onChange={(e) => setValorPenalizacionMora(e.target.value)}
-                    placeholder={tipoPenalizacionMora === 'porcentaje' ? 'Ej: 5' : 'Ej: 50'}
-                    className="h-[36px] font-mono [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                  />
-                  <p className="text-[11px] text-text-muted mt-1">
-                    Aplica acumulativamente por cada cuota vencida según las reglas financieras del producto.
-                  </p>
-                </div>
-              </div>
-
-              {/* Botones de Acción */}
-              <div className="pt-3 flex items-center justify-end gap-2.5 border-t border-border">
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={isSaving}
-                  onClick={() => setIsModalOpen(false)}
-                >
-                  Cancelar
-                </Button>
-                <Button
-                  type="submit"
-                  variant="stripe-actions"
-                  disabled={isSaving}
-                  className="gap-1.5"
-                >
-                  {isSaving ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Guardando...
-                    </>
-                  ) : (
-                    'Guardar Producto'
-                  )}
-                </Button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+            {/* Botones de Acción */}
+            <div className="pt-3 flex items-center justify-end gap-2.5 border-t border-border">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isSaving}
+                onClick={() => setIsModalOpen(false)}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="submit"
+                variant="stripe-actions"
+                disabled={isSaving}
+                className="gap-1.5"
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" /> Guardando...
+                  </>
+                ) : (
+                  'Guardar Producto'
+                )}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
