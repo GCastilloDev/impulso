@@ -118,11 +118,11 @@ flowchart TD
 
 ## 5. Checklist de Verificación y Criterios de Aceptación
 
-- [ ] Fuentes `Inter` y `Source Code Pro` configuradas con OpenType `tnum`.
-- [ ] Variables CSS de Stripe Dashboard (`#635bff`, `#1a1f36`, `#3c4257`, `#697386`, `#e3e8ee`) en `globals.css`.
-- [ ] Sidebar con selector de organización, sub-enlaces jerárquicos y pie de desarrolladores.
-- [ ] Detalle de cliente con distribución en 2 columnas (30% / 70%).
-- [ ] Modales cumplen estrictamente con `.agents/rules/modals.md` (no cierre por backdrop).
-- [ ] Server Actions conservan `unstable_noStore as noStore`.
-- [ ] Compilación TypeScript (`npx tsc --noEmit`) sin advertencias ni errores.
-- [ ] Commits atómicos unitarios en español sin atribuciones a IA.
+- [x] Fuentes `Inter` y `Source Code Pro` configuradas con OpenType `tnum`.
+- [x] Variables CSS de Stripe Dashboard (`#635bff`, `#1a1f36`, `#3c4257`, `#697386`, `#e3e8ee`) en `globals.css`.
+- [x] Sidebar con selector de organización, sub-enlaces jerárquicos y pie de desarrolladores.
+- [x] Detalle de cliente con distribución en 2 columnas (30% / 70%).
+- [x] Modales cumplen estrictamente con `.agents/rules/modals.md` (no cierre por backdrop).
+- [x] Server Actions conservan `unstable_noStore as noStore`.
+- [x] Compilación TypeScript (`npx tsc --noEmit`) sin advertencias ni errores.
+- [ ] Commits atómicos unitarios en español sin atribuciones a IA (en proceso para T6).
