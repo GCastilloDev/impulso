@@ -1,9 +1,11 @@
 'use server';
 
+import { unstable_noStore as noStore } from 'next/cache';
 import { db } from '@/lib/db';
 import bcrypt from 'bcryptjs';
 
 export async function loginAction(emailInput: string, passwordInput: string) {
+  noStore();
   try {
     const user = await db.user.findUnique({
       where: { email: emailInput.trim().toLowerCase() },

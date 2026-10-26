@@ -73,6 +73,7 @@ export async function getUsersAction(params?: {
 }
 
 export async function getUserByIdAction(userId: string) {
+  noStore();
   try {
     const u = await db.user.findFirst({
       where: {

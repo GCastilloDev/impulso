@@ -77,6 +77,7 @@ export async function getClientsAction(params?: {
 }
 
 export async function getClientByIdAction(clientId: string) {
+  noStore();
   try {
     const c = await db.client.findUnique({
       where: { id: clientId },
