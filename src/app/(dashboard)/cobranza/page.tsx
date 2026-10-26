@@ -45,6 +45,13 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { InstallmentStatusBadge } from '@/components/shared/StatusBadges';
 
 interface CollectionItem {
@@ -817,49 +824,55 @@ export default function CollectionPage() {
             {/* Filtro Promotor */}
             <div className="flex items-center gap-1.5 text-[13px]">
               <span className="text-text-muted text-[12px] font-medium">Promotor:</span>
-              <select
-                value={promotorFilter}
-                onChange={(e) => setPromotorFilter(e.target.value)}
-                className="h-[34px] rounded-[4px] border border-border bg-white text-text-secondary text-[13px] font-medium px-2.5 py-1 focus:ring-2 focus:ring-ring focus:outline-none capitalize cursor-pointer max-w-[150px] truncate"
-              >
-                {!isPromotorUser && <option value="todos">Todos</option>}
-                {promoterCatalog.map((p) => (
-                  <option key={p.name} value={p.name}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
+              <Select value={promotorFilter} onValueChange={(val) => setPromotorFilter(val)}>
+                <SelectTrigger className="w-auto min-w-[130px] max-w-[160px] capitalize">
+                  <SelectValue placeholder="Promotor" />
+                </SelectTrigger>
+                <SelectContent>
+                  {!isPromotorUser && <SelectItem value="todos">Todos</SelectItem>}
+                  {promoterCatalog.map((p) => (
+                    <SelectItem key={p.name} value={p.name} className="capitalize">
+                      {p.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             {/* Filtro Frecuencia */}
             <div className="flex items-center gap-1.5 text-[13px]">
               <span className="text-text-muted text-[12px] font-medium">Frecuencia:</span>
-              <select
+              <Select
                 value={frecuenciaFilter}
-                onChange={(e) => setFrecuenciaFilter(e.target.value as 'todas' | 'diario' | 'semanal')}
-                className="h-[34px] rounded-[4px] border border-border bg-white text-text-secondary text-[13px] font-medium px-2.5 py-1 focus:ring-2 focus:ring-ring focus:outline-none cursor-pointer"
+                onValueChange={(val) => setFrecuenciaFilter(val as 'todas' | 'diario' | 'semanal')}
               >
-                <option value="todas">Todas</option>
-                <option value="diario">Diario</option>
-                <option value="semanal">Semanal</option>
-              </select>
+                <SelectTrigger className="w-[110px]">
+                  <SelectValue placeholder="Frecuencia" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todas">Todas</SelectItem>
+                  <SelectItem value="diario">Diario</SelectItem>
+                  <SelectItem value="semanal">Semanal</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             {/* Filtro Producto */}
             <div className="flex items-center gap-1.5 text-[13px]">
               <span className="text-text-muted text-[12px] font-medium">Producto:</span>
-              <select
-                value={productoFilter}
-                onChange={(e) => setProductoFilter(e.target.value)}
-                className="h-[34px] rounded-[4px] border border-border bg-white text-text-secondary text-[13px] font-medium px-2.5 py-1 focus:ring-2 focus:ring-ring focus:outline-none cursor-pointer max-w-[150px] truncate"
-              >
-                <option value="todos">Todos</option>
-                {activeProducts.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.nombre}
-                  </option>
-                ))}
-              </select>
+              <Select value={productoFilter} onValueChange={(val) => setProductoFilter(val)}>
+                <SelectTrigger className="w-auto min-w-[130px] max-w-[170px]">
+                  <SelectValue placeholder="Producto" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos</SelectItem>
+                  {activeProducts.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.nombre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
         </div>
@@ -2045,27 +2058,28 @@ export default function CollectionPage() {
               {/* Motivo de Fuerza Mayor Tipificado */}
               <div>
                 <label className="block text-foreground font-medium text-[13px] mb-1.5">Causa Tipificada *</label>
-                <select
-                  value={motivoCausa}
-                  onChange={(e) => setMotivoCausa(e.target.value)}
-                  className="w-full h-[36px] px-3 rounded-[4px] bg-white border border-border text-foreground text-[13px] font-medium focus:outline-none focus:ring-2 focus:ring-ring cursor-pointer"
-                >
-                  <option value="Condiciones climáticas adversas / Inaccesibilidad en ruta">
-                    Condiciones climáticas adversas / Inaccesibilidad en ruta
-                  </option>
-                  <option value="Enfermedad o urgencia médica del promotor">
-                    Enfermedad o urgencia médica del promotor
-                  </option>
-                  <option value="Causa de fuerza mayor en la comunidad / Bloqueo">
-                    Causa de fuerza mayor en la comunidad / Bloqueo
-                  </option>
-                  <option value="Cliente hospitalizado o emergencia demostrable">
-                    Cliente hospitalizado o emergencia demostrable
-                  </option>
-                  <option value="Otro impedimento justificado">
-                    Otro impedimento justificado
-                  </option>
-                </select>
+                <Select value={motivoCausa} onValueChange={(val) => setMotivoCausa(val)}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Seleccione una causa" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Condiciones climáticas adversas / Inaccesibilidad en ruta">
+                      Condiciones climáticas adversas / Inaccesibilidad en ruta
+                    </SelectItem>
+                    <SelectItem value="Enfermedad o urgencia médica del promotor">
+                      Enfermedad o urgencia médica del promotor
+                    </SelectItem>
+                    <SelectItem value="Causa de fuerza mayor en la comunidad / Bloqueo">
+                      Causa de fuerza mayor en la comunidad / Bloqueo
+                    </SelectItem>
+                    <SelectItem value="Cliente hospitalizado o emergencia demostrable">
+                      Cliente hospitalizado o emergencia demostrable
+                    </SelectItem>
+                    <SelectItem value="Otro impedimento justificado">
+                      Otro impedimento justificado
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
               {/* Detalles y Justificación */}
