@@ -27,13 +27,25 @@ import {
   PieChart,
   Pie,
   Cell,
-  BarChart,
-  Bar,
-  Legend,
 } from 'recharts';
 import { useImpulsoStore } from '@/store/useImpulsoStore';
-import { formatCurrency, formatDate, formatDateWithTime, getTodayDateString } from '@/lib/utils';
-import { LoanStatusBadge } from '@/components/shared/StatusBadges';
+import { formatCurrency, formatDateWithTime, getTodayDateString } from '@/lib/utils';
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+} from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 
 export default function DashboardPage() {
   const { loans, clients, payments, currentUser, loadDataFromDB } = useImpulsoStore();
@@ -70,9 +82,9 @@ export default function DashboardPage() {
 
   // Chart Data Preparation: Portfolio Distribution
   const portfolioDistribution = [
-    { name: 'Activos al día', value: loans.filter((l) => l.estatus === 'Activo').length, color: '#10b981' },
-    { name: 'En Mora', value: prestamosEnMora.length, color: '#f43f5e' },
-    { name: 'Liquidados', value: loans.filter((l) => l.estatus === 'Liquidado').length, color: '#3b82f6' },
+    { name: 'Activos al día', value: loans.filter((l) => l.estatus === 'Activo').length, color: '#00875a' },
+    { name: 'En Mora', value: prestamosEnMora.length, color: '#de350b' },
+    { name: 'Liquidados', value: loans.filter((l) => l.estatus === 'Liquidado').length, color: '#635bff' },
   ];
 
   // Chart Data: Weekly Projections vs Collection Real
@@ -87,7 +99,7 @@ export default function DashboardPage() {
   ];
 
   const exportDataJSON = () => {
-    const jsonString = `data:text/json;chatset=utf-8,${encodeURIComponent(
+    const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(
       JSON.stringify({ loans, clients, payments }, null, 2)
     )}`;
     const link = document.createElement('a');
@@ -98,10 +110,12 @@ export default function DashboardPage() {
 
   if (isPageLoading || !mounted) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[400px] p-12 space-y-4 glass-panel rounded-3xl border border-slate-800 my-8">
-        <Loader2 className="w-10 h-10 text-emerald-400 animate-spin" />
-        <p className="text-sm font-semibold text-slate-300">Consultando métricas en tiempo real desde PostgreSQL...</p>
-      </div>
+      <Card className="flex flex-col items-center justify-center min-h-[400px] p-12 space-y-4 rounded-[6px] border-border bg-card my-8 shadow-2xs">
+        <Loader2 className="w-8 h-8 text-primary animate-spin" />
+        <p className="text-[13px] font-medium text-text-muted">
+          Consultando métricas en tiempo real desde PostgreSQL...
+        </p>
+      </Card>
     );
   }
 
@@ -110,230 +124,289 @@ export default function DashboardPage() {
       {/* Top Welcome & Actions Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl md:text-3xl font-black text-white tracking-tight flex items-center gap-2">
+          <h1 className="text-[22px] md:text-[24px] font-semibold text-foreground tracking-tight flex items-center gap-2.5">
             Panel Ejecutivo de Cobranza
           </h1>
-          <p className="text-xs md:text-sm text-slate-400 mt-1">
-            Bienvenido, <strong className="text-emerald-400">{currentUser.name}</strong> • Resumen general en tiempo real de Financiera Impulso.
+          <p className="text-[13px] text-text-muted mt-1">
+            Bienvenido, <strong className="text-foreground font-semibold">{currentUser.name}</strong> • Resumen general en tiempo real de Financiera Impulso.
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <button
+        <div className="flex items-center gap-2.5">
+          <Button
+            type="button"
+            variant="outline"
             onClick={exportDataJSON}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold text-slate-300 bg-slate-900 hover:bg-slate-800 border border-slate-700 transition-all"
+            className="h-[34px] text-[13px]"
           >
-            <Download className="w-3.5 h-3.5" /> Exportar JSON
-          </button>
+            <Download className="w-3.5 h-3.5 mr-1" /> Exportar JSON
+          </Button>
 
-          <Link
-            href="/cobranza"
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-extrabold text-xs shadow-lg shadow-emerald-500/20 transition-all"
-          >
-            <Smartphone className="w-4 h-4" /> Ir a Ruta de Cobro
-          </Link>
+          <Button asChild variant="stripe-actions" className="h-[34px] text-[13px]">
+            <Link href="/cobranza">
+              <Smartphone className="w-3.5 h-3.5 mr-1" /> Ir a Ruta de Cobro
+            </Link>
+          </Button>
         </div>
       </div>
 
       {/* KPI Cards Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* KPI 1 */}
-        <div className="glass-panel glass-panel-hover p-5 rounded-2xl border border-slate-800 space-y-2">
-          <div className="flex justify-between items-center text-slate-400">
-            <span className="text-xs font-semibold uppercase tracking-wider">Cartera Activa</span>
-            <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
-              <Banknote className="w-4 h-4" />
+        {/* KPI 1: Cartera Activa */}
+        <Card className="p-4 bg-card border-border rounded-[6px] shadow-2xs space-y-1.5">
+          <div className="flex justify-between items-center text-text-muted">
+            <span className="text-[11.5px] font-medium uppercase tracking-wider">Cartera Activa</span>
+            <div className="w-7 h-7 rounded-[4px] bg-primary/10 text-primary flex items-center justify-center">
+              <Banknote className="w-3.5 h-3.5" />
             </div>
           </div>
-          <p className="text-2xl font-black text-white">{formatCurrency(totalCarteraActiva)}</p>
-          <p className="text-[11px] text-emerald-400 font-medium flex items-center gap-1">
-            <ArrowUpRight className="w-3.5 h-3.5" /> {loans.filter((l) => l.estatus === 'Activo').length} créditos vigentes
+          <p className="text-[22px] font-semibold text-foreground font-mono tabular-nums">
+            {formatCurrency(totalCarteraActiva)}
           </p>
-        </div>
+          <p className="text-[12px] text-text-muted font-medium flex items-center gap-1">
+            <ArrowUpRight className="w-3.5 h-3.5 text-primary" /> {loans.filter((l) => l.estatus === 'Activo').length} créditos vigentes
+          </p>
+        </Card>
 
-        {/* KPI 2 */}
-        <div className="glass-panel glass-panel-hover p-5 rounded-2xl border border-slate-800 space-y-2">
-          <div className="flex justify-between items-center text-slate-400">
-            <span className="text-xs font-semibold uppercase tracking-wider">Cobrado Hoy</span>
-            <div className="w-8 h-8 rounded-xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center">
-              <DollarSign className="w-4 h-4" />
+        {/* KPI 2: Cobrado Hoy */}
+        <Card className="p-4 bg-card border-border rounded-[6px] shadow-2xs space-y-1.5">
+          <div className="flex justify-between items-center text-text-muted">
+            <span className="text-[11.5px] font-medium uppercase tracking-wider">Cobrado Hoy</span>
+            <div className="w-7 h-7 rounded-[4px] bg-badge-success-bg text-badge-success-text flex items-center justify-center">
+              <DollarSign className="w-3.5 h-3.5" />
             </div>
           </div>
-          <p className="text-2xl font-black text-emerald-400">{formatCurrency(cobradoHoy)}</p>
-          <p className="text-[11px] text-slate-400 font-medium">
+          <p className="text-[22px] font-semibold text-badge-success-text font-mono tabular-nums">
+            {formatCurrency(cobradoHoy)}
+          </p>
+          <p className="text-[12px] text-text-muted font-medium">
             Registrado por promotores hoy
           </p>
-        </div>
+        </Card>
 
-        {/* KPI 3 */}
-        <div className="glass-panel glass-panel-hover p-5 rounded-2xl border border-slate-800 space-y-2">
-          <div className="flex justify-between items-center text-slate-400">
-            <span className="text-xs font-semibold uppercase tracking-wider">Índice de Morosidad</span>
-            <div className="w-8 h-8 rounded-xl bg-rose-500/10 text-rose-400 flex items-center justify-center">
-              <AlertTriangle className="w-4 h-4" />
+        {/* KPI 3: Índice de Morosidad */}
+        <Card className="p-4 bg-card border-border rounded-[6px] shadow-2xs space-y-1.5">
+          <div className="flex justify-between items-center text-text-muted">
+            <span className="text-[11.5px] font-medium uppercase tracking-wider">Índice de Morosidad</span>
+            <div className="w-7 h-7 rounded-[4px] bg-badge-danger-bg text-badge-danger-text flex items-center justify-center">
+              <AlertTriangle className="w-3.5 h-3.5" />
             </div>
           </div>
-          <p className="text-2xl font-black text-rose-400">{indiceMorosidad.toFixed(1)}%</p>
-          <p className="text-[11px] text-rose-300 font-medium">
+          <p className="text-[22px] font-semibold text-badge-danger-text font-mono tabular-nums">
+            {indiceMorosidad.toFixed(1)}%
+          </p>
+          <p className="text-[12px] text-badge-danger-text font-medium">
             {prestamosEnMora.length} préstamos en mora
           </p>
-        </div>
+        </Card>
 
-        {/* KPI 4 */}
-        <div className="glass-panel glass-panel-hover p-5 rounded-2xl border border-slate-800 space-y-2">
-          <div className="flex justify-between items-center text-slate-400">
-            <span className="text-xs font-semibold uppercase tracking-wider">Clientes Activos</span>
-            <div className="w-8 h-8 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center">
-              <Users className="w-4 h-4" />
+        {/* KPI 4: Clientes Activos */}
+        <Card className="p-4 bg-card border-border rounded-[6px] shadow-2xs space-y-1.5">
+          <div className="flex justify-between items-center text-text-muted">
+            <span className="text-[11.5px] font-medium uppercase tracking-wider">Clientes Activos</span>
+            <div className="w-7 h-7 rounded-[4px] bg-badge-info-bg text-badge-info-text flex items-center justify-center">
+              <Users className="w-3.5 h-3.5" />
             </div>
           </div>
-          <p className="text-2xl font-black text-white">{totalClientesActivos}</p>
-          <p className="text-[11px] text-slate-400 font-medium">
+          <p className="text-[22px] font-semibold text-foreground font-mono tabular-nums">
+            {totalClientesActivos}
+          </p>
+          <p className="text-[12px] text-text-muted font-medium">
             Expedientes registrados
           </p>
-        </div>
+        </Card>
       </div>
 
       {/* Analytics Charts Grid */}
       {mounted && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Main Area Chart: Weekly Revenue vs Target */}
-          <div className="lg:col-span-8 glass-panel p-6 rounded-2xl border border-slate-800 space-y-4">
-            <div className="flex justify-between items-center">
-              <div>
-                <h3 className="text-base font-extrabold text-white flex items-center gap-2">
-                  <TrendingUp className="w-5 h-5 text-emerald-400" />
-                  Comportamiento de Cobranza Semanal
-                </h3>
-                <p className="text-xs text-slate-400">Comparativa entre cobro proyectado vs real recabado por promotores.</p>
-              </div>
-            </div>
+          <Card className="lg:col-span-8 rounded-[6px] border-border bg-card shadow-2xs">
+            <CardHeader className="p-4 border-b border-border space-y-0.5">
+              <CardTitle className="text-[15px] font-semibold text-foreground flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-primary" />
+                Comportamiento de Cobranza Semanal
+              </CardTitle>
+              <CardDescription>
+                Comparativa entre cobro proyectado vs real recabado por promotores.
+              </CardDescription>
+            </CardHeader>
 
-            <div className="h-72 w-full pt-2">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={weeklyCollectionData}>
-                  <defs>
-                    <linearGradient id="colorReal" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.4} />
-                      <stop offset="95%" stopColor="#10b981" stopOpacity={0.0} />
-                    </linearGradient>
-                    <linearGradient id="colorProyectado" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#6366f1" stopOpacity={0.0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                  <XAxis dataKey="dia" stroke="#64748b" fontSize={11} />
-                  <YAxis stroke="#64748b" fontSize={11} tickFormatter={(v) => `$${v / 1000}k`} />
-                  <Tooltip
-                    contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '12px' }}
-                    formatter={(value: any) => formatCurrency(Number(value))}
-                  />
-                  <Area type="monotone" dataKey="real" name="Cobrado Real" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorReal)" />
-                  <Area type="monotone" dataKey="proyectado" name="Proyectado" stroke="#6366f1" strokeWidth={2} strokeDasharray="4 4" fillOpacity={1} fill="url(#colorProyectado)" />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
+            <CardContent className="p-4">
+              <div className="h-72 w-full pt-2">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={weeklyCollectionData}>
+                    <defs>
+                      <linearGradient id="colorReal" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#635bff" stopOpacity={0.35} />
+                        <stop offset="95%" stopColor="#635bff" stopOpacity={0.0} />
+                      </linearGradient>
+                      <linearGradient id="colorProyectado" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#94a3b8" stopOpacity={0.25} />
+                        <stop offset="95%" stopColor="#94a3b8" stopOpacity={0.0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e3e8ee" />
+                    <XAxis dataKey="dia" stroke="#697386" fontSize={11} tickLine={false} />
+                    <YAxis
+                      stroke="#697386"
+                      fontSize={11}
+                      tickLine={false}
+                      tickFormatter={(v) => `$${v / 1000}k`}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: '#ffffff',
+                        borderColor: '#e3e8ee',
+                        borderRadius: '6px',
+                        color: '#1a1f36',
+                        fontSize: '12px',
+                        boxShadow: '0 2px 4px rgba(0,0,0,0.08)',
+                      }}
+                      formatter={(value: any) => formatCurrency(Number(value))}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="real"
+                      name="Cobrado Real"
+                      stroke="#635bff"
+                      strokeWidth={2.5}
+                      fillOpacity={1}
+                      fill="url(#colorReal)"
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="proyectado"
+                      name="Proyectado"
+                      stroke="#94a3b8"
+                      strokeWidth={1.5}
+                      strokeDasharray="4 4"
+                      fillOpacity={1}
+                      fill="url(#colorProyectado)"
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
 
           {/* Pie Chart: Portfolio Health */}
-          <div className="lg:col-span-4 glass-panel p-6 rounded-2xl border border-slate-800 space-y-4 flex flex-col justify-between">
-            <div>
-              <h3 className="text-base font-extrabold text-white flex items-center gap-2">
-                <Layers className="w-5 h-5 text-emerald-400" />
+          <Card className="lg:col-span-4 rounded-[6px] border-border bg-card shadow-2xs flex flex-col justify-between">
+            <CardHeader className="p-4 border-b border-border space-y-0.5">
+              <CardTitle className="text-[15px] font-semibold text-foreground flex items-center gap-2">
+                <Layers className="w-4 h-4 text-primary" />
                 Salud de la Cartera
-              </h3>
-              <p className="text-xs text-slate-400">Distribución de préstamos según estatus.</p>
-            </div>
+              </CardTitle>
+              <CardDescription>Distribución de préstamos según estatus.</CardDescription>
+            </CardHeader>
 
-            <div className="h-56 w-full relative">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={portfolioDistribution}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={55}
-                    outerRadius={80}
-                    paddingAngle={5}
-                    dataKey="value"
-                  >
-                    {portfolioDistribution.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '12px' }}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
+            <CardContent className="p-4 flex-1 flex flex-col justify-between">
+              <div className="h-56 w-full relative">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={portfolioDistribution}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={55}
+                      outerRadius={80}
+                      paddingAngle={5}
+                      dataKey="value"
+                    >
+                      {portfolioDistribution.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: '#ffffff',
+                        borderColor: '#e3e8ee',
+                        borderRadius: '6px',
+                        color: '#1a1f36',
+                        fontSize: '12px',
+                        boxShadow: '0 2px 4px rgba(0,0,0,0.08)',
+                      }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
 
-            <div className="space-y-1.5 text-xs pt-2 border-t border-slate-800">
-              {portfolioDistribution.map((item) => (
-                <div key={item.name} className="flex justify-between items-center">
-                  <span className="flex items-center gap-2 text-slate-300">
-                    <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }} />
-                    {item.name}
-                  </span>
-                  <span className="font-extrabold text-white">{item.value} créditos</span>
-                </div>
-              ))}
-            </div>
-          </div>
+              <div className="space-y-1.5 text-[12px] pt-3 border-t border-border">
+                {portfolioDistribution.map((item) => (
+                  <div key={item.name} className="flex justify-between items-center">
+                    <span className="flex items-center gap-2 text-text-secondary">
+                      <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }} />
+                      {item.name}
+                    </span>
+                    <span className="font-semibold text-foreground font-mono tabular-nums">{item.value} créditos</span>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
         </div>
       )}
 
       {/* Recent Payments Table */}
-      <div className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-4">
-        <div className="flex justify-between items-center">
-          <h2 className="text-lg font-extrabold text-white flex items-center gap-2 tracking-tight">
-            <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-            Transacciones de Cobro Recientes (Zustand Persist)
-          </h2>
-          <Link href="/cobranza" className="text-xs font-semibold text-emerald-400 hover:underline">
-            Ver Cobranza Completa →
-          </Link>
-        </div>
+      <Card className="rounded-[6px] border-border bg-card shadow-2xs overflow-hidden">
+        <CardHeader className="flex flex-row items-center justify-between p-4 border-b border-border space-y-0">
+          <CardTitle className="text-[15px] font-semibold text-foreground flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-primary" />
+            Transacciones de Cobro Recientes
+          </CardTitle>
+          <Button asChild variant="ghost" size="sm" className="text-primary hover:text-primary-hover text-[12px] h-[30px] px-2.5">
+            <Link href="/cobranza">
+              Ver Cobranza Completa →
+            </Link>
+          </Button>
+        </CardHeader>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-slate-900/90 text-slate-400 font-semibold border-b border-slate-800 uppercase tracking-wider">
-              <tr>
-                <th className="p-3">Recibo</th>
-                <th className="p-3">Cliente</th>
-                <th className="p-3">Préstamo</th>
-                <th className="p-3">Cuota #</th>
-                <th className="p-3">Monto Recibido</th>
-                <th className="p-3">Método & Fecha</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800/80">
-              {payments.slice(0, 5).map((payment) => (
-                <tr key={payment.id} className="hover:bg-slate-800/40">
-                  <td className="p-3 font-mono font-bold text-emerald-400">{payment.folioRecibo}</td>
-                  <td className="p-3 font-bold text-white">{payment.clienteNombre}</td>
-                  <td className="p-3 font-mono text-slate-300">{payment.prestamoFolio}</td>
-                  <td className="p-3 font-bold text-slate-200">Cuota #{payment.numeroCuota}</td>
-                  <td className="p-3 font-black text-emerald-400 text-sm">
-                    {formatCurrency(payment.montoRecibido)}
-                  </td>
-                  <td className="p-3 text-slate-400 text-[11px]">
-                    <span className="text-slate-200 font-semibold">{payment.metodoPago}</span> • {formatDateWithTime(payment.fechaPago)}
-                  </td>
-                </tr>
-              ))}
-              {payments.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="p-6 text-center text-slate-500">
-                    No se han registrado pagos en la sesión actual.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="min-w-[120px]">Recibo</TableHead>
+              <TableHead className="min-w-[180px]">Cliente</TableHead>
+              <TableHead className="min-w-[130px]">Préstamo</TableHead>
+              <TableHead className="min-w-[110px]">Cuota #</TableHead>
+              <TableHead className="text-right min-w-[130px]">Monto Recibido</TableHead>
+              <TableHead className="min-w-[180px]">Método & Fecha</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {payments.slice(0, 5).map((payment) => (
+              <TableRow key={payment.id}>
+                <TableCell>
+                  <span className="inline-block font-mono text-[11px] bg-surface-subtle border border-border px-1.5 py-0.5 rounded-[4px] text-primary font-medium select-all">
+                    {payment.folioRecibo}
+                  </span>
+                </TableCell>
+                <TableCell className="font-semibold text-foreground text-[13px]">
+                  {payment.clienteNombre}
+                </TableCell>
+                <TableCell className="font-mono text-[12px] text-text-secondary">
+                  {payment.prestamoFolio}
+                </TableCell>
+                <TableCell className="font-medium text-foreground text-[13px]">
+                  Cuota #{payment.numeroCuota}
+                </TableCell>
+                <TableCell className="text-right font-mono tabular-nums text-[14px] font-semibold text-primary">
+                  {formatCurrency(payment.montoRecibido)}
+                </TableCell>
+                <TableCell className="text-[12px] text-text-muted">
+                  <span className="text-text-secondary font-medium">{payment.metodoPago}</span> • {formatDateWithTime(payment.fechaPago)}
+                </TableCell>
+              </TableRow>
+            ))}
+            {payments.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={6} className="p-8 text-center text-text-muted">
+                  No se han registrado pagos en la sesión actual.
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </Card>
     </div>
   );
 }
